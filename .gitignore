@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+
+# Native
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+
+# Metro
+.metro-health-check*
+
+# Debug / logs
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+*.log
+
+# macOS
+.DS_Store
+
+# Claude Code (local state)
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+
+# Documents (design specs, PRDs — kept locally, not committed)
+LowLift_Design_System.html
+LowLift_Design_System.md
+LowLift_Fitness_Feature_Specs.docx
+LowLift_Fitness_MVP_PRD.docx
