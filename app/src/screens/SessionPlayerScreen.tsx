@@ -21,13 +21,21 @@ type Props = {
   session: Session;
   onComplete: () => void;
   onExit: () => void;
+  onMovementStart?: (index: number) => void;
+  onMovementComplete?: (index: number) => void;
 };
 
 type Phase = 'countdown' | 'movement';
 
 const COUNTDOWN_SECONDS = 5;
 
-export function SessionPlayerScreen({ session, onComplete, onExit }: Props) {
+export function SessionPlayerScreen({
+  session,
+  onComplete,
+  onExit,
+  onMovementStart,
+  onMovementComplete,
+}: Props) {
   const [phase, setPhase] = useState<Phase>('countdown');
   const [index, setIndex] = useState(0);
   const [remaining, setRemaining] = useState(COUNTDOWN_SECONDS);
@@ -106,6 +114,7 @@ export function SessionPlayerScreen({ session, onComplete, onExit }: Props) {
         setIndex(0);
         setRemaining(session.movements[0].duration);
         startedAt.current = Date.now();
+        onMovementStart?.(0);
         Animated.timing(contentOpacity, {
           toValue: 1,
           duration: 250,
@@ -114,6 +123,7 @@ export function SessionPlayerScreen({ session, onComplete, onExit }: Props) {
         return;
       }
 
+      onMovementComplete?.(index);
       const isLast = index === total - 1;
       if (isLast) {
         onComplete();
@@ -123,13 +133,25 @@ export function SessionPlayerScreen({ session, onComplete, onExit }: Props) {
       setIndex(nextIndex);
       setRemaining(session.movements[nextIndex].duration);
       startedAt.current = Date.now();
+      onMovementStart?.(nextIndex);
       Animated.timing(contentOpacity, {
         toValue: 1,
         duration: 250,
         useNativeDriver: true,
       }).start();
     });
-  }, [remaining, paused, phase, index, total, session.movements, contentOpacity, onComplete]);
+  }, [
+    remaining,
+    paused,
+    phase,
+    index,
+    total,
+    session.movements,
+    contentOpacity,
+    onComplete,
+    onMovementStart,
+    onMovementComplete,
+  ]);
 
   const minutes = Math.floor(remaining / 60);
   const seconds = remaining % 60;
@@ -168,7 +190,7 @@ export function SessionPlayerScreen({ session, onComplete, onExit }: Props) {
             <Text style={styles.timer}>{seconds.toString().padStart(2, '0')}</Text>
           </View>
           <Text style={styles.movementName}>{movement.name}</Text>
-          <Text style={styles.coaching}>{movement.coachingText}</Text>
+          <Text style={styles.coaching}>{movement.cues.join(' · ')}</Text>
         </>
       )}
     </Animated.View>

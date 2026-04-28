@@ -1,6 +1,6 @@
 import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { SessionCard, SessionType } from '../components/SessionCard';
-import { colors, spacing } from '../theme/tokens';
+import { colors, spacing, type as typeTokens } from '../theme/tokens';
 
 type Props = {
   onSelect: (type: SessionType) => void;
@@ -17,8 +17,13 @@ export function SessionSelectionScreen({ onSelect, onBack }: Props) {
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.container}>
-        <Text style={styles.overline}>WHAT SOUNDS GOOD?</Text>
-        <View style={styles.topSpacer} />
+        <View style={styles.headerSpacer} />
+
+        <View style={styles.header}>
+          <Text style={styles.headline}>How do you want to move?</Text>
+          <Text style={styles.subtext}>Pick what fits. We'll handle the rest.</Text>
+        </View>
+
         <View style={styles.cards}>
           {SESSIONS.map((s) => (
             <SessionCard
@@ -30,7 +35,9 @@ export function SessionSelectionScreen({ onSelect, onBack }: Props) {
             />
           ))}
         </View>
+
         <View style={styles.bottomSpacer} />
+
         {onBack && (
           <View style={styles.footer}>
             <Pressable
@@ -61,22 +68,27 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: spacing.s6,
   },
-  overline: {
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 1.5,
-    color: colors.gray400,
-    marginTop: spacing.s4,
-    textTransform: 'uppercase',
+  headerSpacer: {
+    height: 48,
   },
-  topSpacer: {
-    flex: 1,
+  header: {
+    marginTop: spacing.s6,
+    marginBottom: spacing.s10,
+  },
+  headline: {
+    ...typeTokens.h1,
+    color: colors.black,
+  },
+  subtext: {
+    ...typeTokens.body,
+    color: colors.dustyBlueDark,
+    marginTop: spacing.s3,
   },
   cards: {
     gap: spacing.s3,
   },
   bottomSpacer: {
-    flex: 1.2,
+    flex: 1,
   },
   footer: {
     paddingBottom: spacing.s6,

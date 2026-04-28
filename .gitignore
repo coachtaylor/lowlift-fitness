@@ -30,6 +30,10 @@ yarn-error.*
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
 
+# Supabase CLI state
+supabase/.temp/
+supabase/.branches/
+
 # Documents (design specs, PRDs — kept locally, not committed)
 LowLift_Design_System.html
 LowLift_Design_System.md

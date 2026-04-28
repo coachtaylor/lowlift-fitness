@@ -1,25 +1,18 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { CompletedSession } from './history';
 
 const KEY_ONBOARDED = 'lowlift:onboarded';
-const KEY_HISTORY = 'lowlift:history';
+const KEY_PENDING_PASSWORD_RESET = 'lowlift:pending_password_reset';
 
 export type PersistedState = {
   onboarded: boolean;
-  history: CompletedSession[];
 };
 
 export async function loadState(): Promise<PersistedState> {
   try {
-    const entries = await AsyncStorage.multiGet([KEY_ONBOARDED, KEY_HISTORY]);
-    const map = Object.fromEntries(entries) as Record<string, string | null>;
-    const onboarded = map[KEY_ONBOARDED] === '1';
-    const history = map[KEY_HISTORY]
-      ? (JSON.parse(map[KEY_HISTORY] as string) as CompletedSession[])
-      : [];
-    return { onboarded, history };
+    const value = await AsyncStorage.getItem(KEY_ONBOARDED);
+    return { onboarded: value === '1' };
   } catch {
-    return { onboarded: false, history: [] };
+    return { onboarded: false };
   }
 }
 
@@ -27,10 +20,22 @@ export async function saveOnboarded(value: boolean): Promise<void> {
   await AsyncStorage.setItem(KEY_ONBOARDED, value ? '1' : '0');
 }
 
-export async function saveHistory(history: CompletedSession[]): Promise<void> {
-  await AsyncStorage.setItem(KEY_HISTORY, JSON.stringify(history));
+export async function setPendingPasswordReset(value: boolean): Promise<void> {
+  if (value) {
+    await AsyncStorage.setItem(KEY_PENDING_PASSWORD_RESET, '1');
+  } else {
+    await AsyncStorage.removeItem(KEY_PENDING_PASSWORD_RESET);
+  }
+}
+
+export async function getPendingPasswordReset(): Promise<boolean> {
+  try {
+    return (await AsyncStorage.getItem(KEY_PENDING_PASSWORD_RESET)) === '1';
+  } catch {
+    return false;
+  }
 }
 
 export async function clearAll(): Promise<void> {
-  await AsyncStorage.multiRemove([KEY_ONBOARDED, KEY_HISTORY]);
+  await AsyncStorage.multiRemove([KEY_ONBOARDED, KEY_PENDING_PASSWORD_RESET]);
 }

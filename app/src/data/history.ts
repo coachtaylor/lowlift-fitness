@@ -1,11 +1,18 @@
 import { SessionType } from '../components/SessionCard';
 
+export type CompletedSessionMovement = {
+  slug: string;
+  name: string;
+  durationSeconds: number;
+};
+
 export type CompletedSession = {
   id: string;
   type: SessionType;
   sessionName: string;
   durationSeconds: number;
   completedAt: number;
+  movements?: CompletedSessionMovement[];
 };
 
 export type WeekDay = {
@@ -100,10 +107,6 @@ export function longestStreak(history: CompletedSession[]): number {
     }
   }
   return longest;
-}
-
-export function countByType(history: CompletedSession[], type: SessionType): number {
-  return history.filter((h) => h.type === type).length;
 }
 
 const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

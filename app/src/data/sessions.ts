@@ -1,113 +1,174 @@
 import { SessionType } from '../components/SessionCard';
+import { Movement, loadMovements } from './movements';
 
-export type Movement = {
-  id: string;
-  name: string;
-  category: 'move' | 'stretch';
-  coachingText: string;
-  duration: number;
-};
+export type { Movement } from './movements';
 
 export type Session = {
   id: string;
+  slug: string;
   type: SessionType;
   name: string;
   movements: Movement[];
 };
 
-const moveSession: Session = {
-  id: 'move-1',
-  type: 'move',
-  name: 'Move',
-  movements: [
-    {
-      id: 'standing-march',
-      name: 'Standing March',
-      category: 'move',
-      coachingText:
-        "Stand tall, lift one knee, then the other. Keep it light and rhythmic — you're just waking things up.",
-      duration: 30,
-    },
-    {
-      id: 'incline-push-up',
-      name: 'Incline Push-Up',
-      category: 'move',
-      coachingText:
-        "Hands on your desk, lower your chest toward the surface. Push back up, nice and steady. You're stronger than you think.",
-      duration: 40,
-    },
-    {
-      id: 'chair-sit-to-stand',
-      name: 'Chair Sit-to-Stand',
-      category: 'move',
-      coachingText:
-        'Stand up from your chair without using your hands, then sit back down slowly. Feel your legs do the work.',
-      duration: 35,
-    },
-    {
-      id: 'standing-calf-raises',
-      name: 'Standing Calf Raises',
-      category: 'move',
-      coachingText:
-        "Lift your heels off the ground, slow and steady. Feel your calves engage. You're already doing more than most people today.",
-      duration: 30,
-    },
-  ],
+type SessionTemplate = {
+  slug: string;
+  type: SessionType;
+  name: string;
+  movementSlugs: string[];
 };
 
-const stretchSession: Session = {
-  id: 'stretch-1',
-  type: 'stretch',
-  name: 'Stretch',
-  movements: [
-    {
-      id: 'neck-stretch',
-      name: 'Neck Stretch',
-      category: 'stretch',
-      coachingText:
-        'Let your right ear drop toward your right shoulder. Breathe. Switch sides when you feel ready.',
-      duration: 40,
-    },
-    {
-      id: 'chest-opener',
-      name: 'Chest Opener',
-      category: 'stretch',
-      coachingText:
-        'Clasp your hands behind your back and lift gently. Feel your chest open up after all that sitting.',
-      duration: 35,
-    },
-    {
-      id: 'seated-spinal-twist',
-      name: 'Seated Spinal Twist',
-      category: 'stretch',
-      coachingText:
-        'Sit tall, rotate your torso to one side, rest a hand on the chair. Breathe into the twist. Repeat on the other side.',
-      duration: 40,
-    },
-  ],
-};
+const TEMPLATES: SessionTemplate[] = [
+  {
+    slug: 'full-body-activation',
+    type: 'move',
+    name: 'Full Body Activation',
+    movementSlugs: [
+      'bodyweight-squat',
+      'incline-push-up',
+      'standing-march',
+      'standing-arm-circles',
+    ],
+  },
+  {
+    slug: 'lower-body-builder',
+    type: 'move',
+    name: 'Lower Body Builder',
+    movementSlugs: [
+      'bodyweight-squat',
+      'reverse-lunges',
+      'standing-calf-raises',
+      'wall-sit',
+    ],
+  },
+  {
+    slug: 'core-and-stability',
+    type: 'move',
+    name: 'Core & Stability',
+    movementSlugs: [
+      'plank-hold',
+      'standing-march',
+      'glute-bridge',
+      'chair-sit-to-stand',
+    ],
+  },
+  {
+    slug: 'desk-relief-flow',
+    type: 'stretch',
+    name: 'Desk Relief Flow',
+    movementSlugs: [
+      'neck-stretch',
+      'chest-opener',
+      'seated-spinal-twist',
+      'hip-flexor-stretch',
+    ],
+  },
+  {
+    slug: 'lower-body-reset',
+    type: 'stretch',
+    name: 'Lower Body Reset',
+    movementSlugs: [
+      'hamstring-stretch',
+      'hip-flexor-stretch',
+      'seated-spinal-twist',
+      'chest-opener',
+    ],
+  },
+  {
+    slug: 'quick-reset',
+    type: 'both',
+    name: 'Quick Reset',
+    movementSlugs: [
+      'standing-march',
+      'bodyweight-squat',
+      'incline-push-up',
+      'chair-sit-to-stand',
+      'chest-opener',
+      'neck-stretch',
+      'seated-spinal-twist',
+    ],
+  },
+  {
+    slug: 'energy-boost',
+    type: 'both',
+    name: 'Energy Boost',
+    movementSlugs: [
+      'standing-march',
+      'reverse-lunges',
+      'bodyweight-squat',
+      'standing-arm-circles',
+      'hip-flexor-stretch',
+      'hamstring-stretch',
+      'seated-spinal-twist',
+    ],
+  },
+  {
+    slug: 'posture-fix',
+    type: 'both',
+    name: 'Posture Fix',
+    movementSlugs: [
+      'standing-arm-circles',
+      'chair-sit-to-stand',
+      'glute-bridge',
+      'plank-hold',
+      'chest-opener',
+      'seated-spinal-twist',
+      'neck-stretch',
+    ],
+  },
+  {
+    slug: 'light-strength-and-mobility',
+    type: 'both',
+    name: 'Light Strength + Mobility',
+    movementSlugs: [
+      'glute-bridge',
+      'standing-calf-raises',
+      'chair-sit-to-stand',
+      'standing-march',
+      'hamstring-stretch',
+      'hip-flexor-stretch',
+      'neck-stretch',
+    ],
+  },
+  {
+    slug: 'full-body-reboot',
+    type: 'both',
+    name: 'Full Body Reboot',
+    movementSlugs: [
+      'wall-sit',
+      'plank-hold',
+      'bodyweight-squat',
+      'reverse-lunges',
+      'hip-flexor-stretch',
+      'chest-opener',
+      'hamstring-stretch',
+    ],
+  },
+];
 
-const bothSession: Session = {
-  id: 'both-1',
-  type: 'both',
-  name: 'Move + Stretch',
-  movements: [
-    moveSession.movements[0],
-    moveSession.movements[1],
-    moveSession.movements[3],
-    stretchSession.movements[0],
-    stretchSession.movements[1],
-    stretchSession.movements[2],
-  ],
-};
+export async function getRandomSession(type: SessionType): Promise<Session | null> {
+  const pool = TEMPLATES.filter((t) => t.type === type);
+  if (pool.length === 0) return null;
+  const pick = pool[Math.floor(Math.random() * pool.length)];
+  return buildSession(pick);
+}
 
-export function getSession(type: SessionType): Session {
-  switch (type) {
-    case 'move':
-      return moveSession;
-    case 'stretch':
-      return stretchSession;
-    case 'both':
-      return bothSession;
+async function buildSession(template: SessionTemplate): Promise<Session | null> {
+  const catalog = await loadMovements();
+  const movements: Movement[] = [];
+  for (const slug of template.movementSlugs) {
+    const m = catalog.get(slug);
+    if (!m) {
+      console.warn('[sessions] missing movement slug in catalog:', slug);
+      return null;
+    }
+    movements.push(m);
   }
+  return {
+    id: template.slug,
+    slug: template.slug,
+    type: template.type,
+    name: template.name,
+    movements,
+  };
 }

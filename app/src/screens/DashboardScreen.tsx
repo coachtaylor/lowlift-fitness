@@ -1,4 +1,10 @@
-import { SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { RecentSessionsCard } from '../components/RecentSessionsCard';
 import { StartSessionButton } from '../components/StartSessionButton';
 import { StreakHeroCard } from '../components/StreakHeroCard';
@@ -22,6 +28,7 @@ export function DashboardScreen({ history, onStart }: Props) {
   if (isEmpty) {
     return (
       <SafeAreaView style={styles.safe}>
+        <View style={styles.headerSpacer} />
         <View style={styles.emptyContainer}>
           <View style={styles.emptyTop} />
           <View style={styles.emptyContent}>
@@ -44,6 +51,7 @@ export function DashboardScreen({ history, onStart }: Props) {
 
   return (
     <SafeAreaView style={styles.safe}>
+      <View style={styles.headerSpacer} />
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
@@ -70,9 +78,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.offWhite,
   },
+  headerSpacer: {
+    height: 48,
+  },
   scroll: {
     paddingHorizontal: spacing.s6,
-    paddingTop: spacing.s5,
+    paddingTop: spacing.s2,
     paddingBottom: spacing.s5,
   },
   cta: {
