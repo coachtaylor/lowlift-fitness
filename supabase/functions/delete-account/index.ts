@@ -1,3 +1,5 @@
+
+
 // Supabase Edge Function: delete-account
 //
 // Apple requires any app with account creation to also provide in-app account

@@ -8,6 +8,7 @@ export type CompletedSessionMovement = {
 
 export type CompletedSession = {
   id: string;
+  sessionSlug: string;
   type: SessionType;
   sessionName: string;
   durationSeconds: number;

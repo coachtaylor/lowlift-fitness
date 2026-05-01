@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import {
   SafeAreaView,
   ScrollView,
@@ -5,25 +6,75 @@ import {
   Text,
   View,
 } from 'react-native';
-import { RecentSessionsCard } from '../components/RecentSessionsCard';
+import { DailyChallengeCard } from '../components/DailyChallengeCard';
+import { FeedbackCard } from '../components/FeedbackCard';
+import { SessionsCard } from '../components/SessionsCard';
 import { StartSessionButton } from '../components/StartSessionButton';
 import { StreakHeroCard } from '../components/StreakHeroCard';
 import { WeekViewCard } from '../components/WeekViewCard';
+import {
+  DailyChallenge,
+  deleteChallenge,
+  isNewDay,
+  loadChallenge,
+  resetForNewDay,
+} from '../data/dailyChallenge';
 import {
   CompletedSession,
   buildWeek,
   currentStreak,
   longestStreak,
 } from '../data/history';
+import { Session } from '../data/sessions';
+import { useFeedbackPrompt } from '../hooks/useFeedbackPrompt';
 import { colors, spacing } from '../theme/tokens';
 
 type Props = {
   history: CompletedSession[];
+  favoriteSlugs: Set<string>;
+  favoriteSessions: Session[];
+  onToggleFavorite: (sessionId: string) => void;
+  onStartFavorite: (sessionId: string) => void;
   onStart: () => void;
+  onSetupChallenge: () => void;
+  onStartChallengeSession: () => void;
 };
 
-export function DashboardScreen({ history, onStart }: Props) {
+export function DashboardScreen({
+  history,
+  favoriteSlugs,
+  favoriteSessions,
+  onToggleFavorite,
+  onStartFavorite,
+  onStart,
+  onSetupChallenge,
+  onStartChallengeSession,
+}: Props) {
   const isEmpty = history.length === 0;
+  const feedback = useFeedbackPrompt(history.length);
+  const [challenge, setChallenge] = useState<DailyChallenge | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const loaded = await loadChallenge();
+      if (cancelled) return;
+      if (loaded && loaded.repeatDaily && isNewDay(loaded)) {
+        const reset = await resetForNewDay();
+        if (!cancelled) setChallenge(reset);
+        return;
+      }
+      if (loaded && !loaded.repeatDaily && isNewDay(loaded)) {
+        await deleteChallenge();
+        if (!cancelled) setChallenge(null);
+        return;
+      }
+      setChallenge(loaded);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   if (isEmpty) {
     return (
@@ -61,10 +112,33 @@ export function DashboardScreen({ history, onStart }: Props) {
           longestStreak={longest}
           totalSessions={history.length}
         />
+        {feedback.visible && (
+          <>
+            <View style={{ height: spacing.s4 }} />
+            <FeedbackCard
+              question={feedback.question}
+              onSubmit={feedback.onSubmit}
+              onDismiss={feedback.onDismiss}
+            />
+          </>
+        )}
         <View style={{ height: spacing.s4 }} />
         <WeekViewCard days={week} />
         <View style={{ height: spacing.s4 }} />
-        <RecentSessionsCard sessions={history} />
+        <DailyChallengeCard
+          challenge={challenge}
+          onSetup={onSetupChallenge}
+          onEdit={onSetupChallenge}
+          onStartSession={onStartChallengeSession}
+        />
+        <View style={{ height: spacing.s4 }} />
+        <SessionsCard
+          history={history}
+          favoriteSlugs={favoriteSlugs}
+          favoriteSessions={favoriteSessions}
+          onToggleFavorite={onToggleFavorite}
+          onStartFavorite={onStartFavorite}
+        />
       </ScrollView>
       <View style={styles.cta}>
         <StartSessionButton onPress={onStart} />

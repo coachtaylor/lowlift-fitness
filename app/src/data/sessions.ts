@@ -153,6 +153,20 @@ export async function getRandomSession(type: SessionType): Promise<Session | nul
   return buildSession(pick);
 }
 
+export async function getSessionBySlug(slug: string): Promise<Session | null> {
+  const template = TEMPLATES.find((t) => t.slug === slug);
+  if (!template) return null;
+  return buildSession(template);
+}
+
+export function getSessionTemplateMeta(
+  slug: string,
+): { slug: string; name: string; type: SessionType } | null {
+  const t = TEMPLATES.find((x) => x.slug === slug);
+  if (!t) return null;
+  return { slug: t.slug, name: t.name, type: t.type };
+}
+
 async function buildSession(template: SessionTemplate): Promise<Session | null> {
   const catalog = await loadMovements();
   const movements: Movement[] = [];

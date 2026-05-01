@@ -1,6 +1,6 @@
-import { Check } from 'lucide-react-native';
+import { Check, Heart } from 'lucide-react-native';
 import { useEffect, useRef } from 'react';
-import { Animated, Easing, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { SecondaryButton } from '../components/SecondaryButton';
 import { Session } from '../data/sessions';
@@ -8,6 +8,8 @@ import { colors, radius, spacing } from '../theme/tokens';
 
 type Props = {
   session: Session;
+  isFavorited: boolean;
+  onToggleFavorite: () => void;
   onDoAnother: () => void;
   onFinish: () => void;
 };
@@ -18,7 +20,13 @@ function formatDuration(totalSeconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-export function CompletionScreen({ session, onDoAnother, onFinish }: Props) {
+export function CompletionScreen({
+  session,
+  isFavorited,
+  onToggleFavorite,
+  onDoAnother,
+  onFinish,
+}: Props) {
   const totalSeconds = session.movements.reduce((a, m) => a + m.duration, 0);
 
   const bgOpacity = useRef(new Animated.Value(0)).current;
@@ -31,6 +39,7 @@ export function CompletionScreen({ session, onDoAnother, onFinish }: Props) {
   const subtextOpacity = useRef(new Animated.Value(0)).current;
   const subtextY = useRef(new Animated.Value(8)).current;
   const summaryOpacity = useRef(new Animated.Value(0)).current;
+  const favoriteOpacity = useRef(new Animated.Value(0)).current;
   const primaryOpacity = useRef(new Animated.Value(0)).current;
   const primaryY = useRef(new Animated.Value(8)).current;
   const secondaryOpacity = useRef(new Animated.Value(0)).current;
@@ -58,6 +67,7 @@ export function CompletionScreen({ session, onDoAnother, onFinish }: Props) {
       Animated.sequence([delay(450), Animated.parallel([fadeIn(headlineOpacity, 300), slideTo0(headlineY, 300)])]),
       Animated.sequence([delay(600), Animated.parallel([fadeIn(subtextOpacity, 300), slideTo0(subtextY, 300)])]),
       Animated.sequence([delay(750), fadeIn(summaryOpacity, 250)]),
+      Animated.sequence([delay(820), fadeIn(favoriteOpacity, 250)]),
       Animated.sequence([delay(900), Animated.parallel([fadeIn(primaryOpacity, 250), slideTo0(primaryY, 250)])]),
       Animated.sequence([delay(1000), Animated.parallel([fadeIn(secondaryOpacity, 250), slideTo0(secondaryY, 250)])]),
     ]).start();
@@ -72,6 +82,7 @@ export function CompletionScreen({ session, onDoAnother, onFinish }: Props) {
     subtextOpacity,
     subtextY,
     summaryOpacity,
+    favoriteOpacity,
     primaryOpacity,
     primaryY,
     secondaryOpacity,
@@ -120,6 +131,37 @@ export function CompletionScreen({ session, onDoAnother, onFinish }: Props) {
           <Animated.View style={[styles.summary, { opacity: summaryOpacity }]}>
             <Text style={styles.summaryName}>{session.name}</Text>
             <Text style={styles.summaryDuration}>{formatDuration(totalSeconds)}</Text>
+          </Animated.View>
+
+          <Animated.View style={[styles.favoriteWrap, { opacity: favoriteOpacity }]}>
+            <Pressable
+              onPress={onToggleFavorite}
+              accessibilityRole="button"
+              accessibilityLabel={
+                isFavorited ? 'Remove from favorites' : 'Save to favorites'
+              }
+              accessibilityState={{ selected: isFavorited }}
+              hitSlop={8}
+              style={({ pressed }) => [
+                styles.favoriteBtn,
+                pressed && styles.favoritePressed,
+              ]}
+            >
+              <Heart
+                size={18}
+                color={isFavorited ? colors.coral : colors.gray500}
+                fill={isFavorited ? colors.coral : 'transparent'}
+                strokeWidth={2}
+              />
+              <Text
+                style={[
+                  styles.favoriteLabel,
+                  isFavorited && styles.favoriteLabelActive,
+                ]}
+              >
+                {isFavorited ? 'Saved' : 'Save session'}
+              </Text>
+            </Pressable>
           </Animated.View>
 
           <View style={styles.bottomSpacer} />
@@ -207,6 +249,29 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.black,
     marginTop: spacing.s1,
+  },
+  favoriteWrap: {
+    alignItems: 'center',
+    marginTop: spacing.s5,
+  },
+  favoriteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.s2,
+    paddingVertical: spacing.s2,
+    paddingHorizontal: spacing.s4,
+    minHeight: 36,
+  },
+  favoritePressed: {
+    opacity: 0.5,
+  },
+  favoriteLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.gray500,
+  },
+  favoriteLabelActive: {
+    color: colors.coral,
   },
   bottomSpacer: {
     flex: 1,

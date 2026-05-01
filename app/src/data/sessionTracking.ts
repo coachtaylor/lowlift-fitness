@@ -113,7 +113,7 @@ export async function loadCompletedSessions(): Promise<CompletedSession[]> {
   const { data, error } = await supabase
     .from('session_attempts')
     .select(
-      'id, session_type, session_name, total_duration_seconds, ended_at, started_at, session_attempt_movements(movement_slug, movement_name, order_index, planned_duration_seconds)',
+      'id, session_slug, session_type, session_name, total_duration_seconds, ended_at, started_at, session_attempt_movements(movement_slug, movement_name, order_index, planned_duration_seconds)',
     )
     .eq('user_id', user.id)
     .eq('status', 'completed')
@@ -142,6 +142,7 @@ export async function loadCompletedSessions(): Promise<CompletedSession[]> {
       }));
     return {
       id: row.id,
+      sessionSlug: row.session_slug,
       type: row.session_type,
       sessionName: row.session_name,
       durationSeconds: row.total_duration_seconds ?? 0,
