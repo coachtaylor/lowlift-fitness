@@ -80,8 +80,8 @@ h1,h2,h3{letter-spacing:-.04em;line-height:1;font-weight:800}
 .btn-ghost--dark:hover{box-shadow:inset 0 0 0 1.6px #fff;transform:translateY(-2px)}
 .btn-dark{background:var(--ink);color:#fff}.btn-dark:hover{transform:translateY(-2px) scale(1.015)}
 
-.badge-pill{display:inline-flex;align-items:center;gap:9px;padding:8px 16px;border-radius:100px;font-size:13.5px;font-weight:700;background:color-mix(in srgb,var(--volt) 18%,transparent);color:var(--ink)}
-.badge-pill .dot{width:7px;height:7px;border-radius:50%;background:var(--volt-deep)}
+.badge-pill{display:inline-flex;align-items:center;gap:8px;padding:3px 7px;border-radius:0;font-size:13.5px;font-weight:700;background:var(--coral);color:#fff}
+.badge-pill .dot{width:7px;height:7px;border-radius:50%;background:#fff}
 .badge-pill--dark{background:rgba(205,255,0,.1);color:#fff;box-shadow:inset 0 0 0 1px rgba(205,255,0,.3)}
 
 /* ---------- nav ---------- */
@@ -103,8 +103,8 @@ h1,h2,h3{letter-spacing:-.04em;line-height:1;font-weight:800}
    HERO
    ============================================================ */
 .hero{padding:140px 0 60px;overflow:hidden}
-.hero .grid{display:grid;grid-template-columns:1.06fr .94fr;gap:30px;align-items:center}
-.hero h1{font-size:clamp(32px,6vw,76px);letter-spacing:-.045em;line-height:.96;margin:24px 0 0;white-space:nowrap}
+.hero .grid{display:grid;grid-template-columns:1fr .92fr;gap:64px;align-items:center}
+.hero h1{font-size:clamp(32px,5.4vw,70px);letter-spacing:-.045em;line-height:.96;margin:24px 0 0;white-space:nowrap}
 .hero .lede{color:var(--dusty-dark);margin:26px 0 34px;max-width:480px}
 .hero .cta{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
 .hero .trust{margin-top:20px;font-size:13.5px;color:var(--g500);font-weight:500;line-height:1.5}
@@ -114,14 +114,14 @@ h1,h2,h3{letter-spacing:-.04em;line-height:1;font-weight:800}
 .illu .blob{position:absolute;width:min(440px,40vw);aspect-ratio:1;border-radius:46% 54% 58% 42%/52% 44% 56% 48%;background:var(--volt);animation:blob 16s var(--ease) infinite}
 .illu .blob.b2{background:var(--ink);opacity:.06;animation-direction:reverse;animation-duration:20s}
 @keyframes blob{0%,100%{border-radius:46% 54% 58% 42%/52% 44% 56% 48%;transform:rotate(0) scale(1)}33%{border-radius:60% 40% 42% 58%/48% 60% 40% 52%;transform:rotate(6deg) scale(1.03)}66%{border-radius:42% 58% 50% 50%/56% 42% 58% 44%;transform:rotate(-5deg) scale(.98)}}
-.illu .person{position:relative;top:26px;width:min(345px,31vw);filter:drop-shadow(0 28px 38px rgba(10,10,10,.2));animation:bob 6s ease-in-out infinite}
+.illu .person{position:relative;top:-6px;width:min(298px,26vw);filter:drop-shadow(0 26px 36px rgba(10,10,10,.18));animation:bob 6s ease-in-out infinite}
 @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-14px)}}
 
 /* floating UI fragments */
 .frag{position:absolute;z-index:4;animation:bob 6s ease-in-out infinite}
 .frag.f-badge{top:8%;right:14%;animation-delay:-1s}
-.frag.f-timer{bottom:14%;left:2%;animation-delay:-2.5s}
-.frag.f-week{bottom:4%;right:6%;animation-delay:-3.5s}
+.frag.f-timer{bottom:6%;left:-2%;animation-delay:-2.5s}
+.frag.f-week{bottom:-2%;right:1%;animation-delay:-3.5s}
 .fr-badge{background:var(--dusty);color:#fff;font-size:12px;font-weight:800;letter-spacing:.14em;padding:9px 15px;border-radius:100px;box-shadow:0 16px 34px -12px var(--dusty);transform:rotate(7deg)}
 .fr-timer{background:#0a0a0a;color:#fff;border-radius:18px;padding:13px 20px;text-align:center;box-shadow:0 24px 50px -18px rgba(10,10,10,.5);transform:rotate(-5deg)}
 .fr-timer .t{font-size:30px;font-weight:900;letter-spacing:-.04em;line-height:1}.fr-timer .t .cl{color:var(--volt)}
