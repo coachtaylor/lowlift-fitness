@@ -15,7 +15,6 @@ import {
 } from '../data/history';
 import { Movement, Session } from '../data/sessions';
 import { colors, spacing } from '../theme/tokens';
-import { GlassCard } from './GlassCard';
 import { SessionType } from './SessionCard';
 
 type Tab = 'recent' | 'favorites';
@@ -33,6 +32,14 @@ const TYPE_ICONS: Record<SessionType, typeof Dumbbell> = {
   stretch: StretchHorizontal,
   both: Zap,
 };
+
+const SLUG_ICON_OVERRIDES: Record<string, typeof Dumbbell> = {
+  'full-body-activation': Zap,
+};
+
+function iconFor(slug: string, type: SessionType): typeof Dumbbell {
+  return SLUG_ICON_OVERRIDES[slug] ?? TYPE_ICONS[type];
+}
 
 export function SessionsCard({
   history,
@@ -59,7 +66,7 @@ export function SessionsCard({
   const recent = history.slice(0, 4);
 
   return (
-    <GlassCard contentStyle={styles.card}>
+    <View style={styles.card}>
       <View style={styles.tabs}>
         <TabButton
           label="Recent"
@@ -80,6 +87,7 @@ export function SessionsCard({
           recent.map((s, i) => (
             <RecentRow
               key={s.id}
+              slug={s.sessionSlug}
               type={s.type}
               name={s.sessionName}
               date={formatRelativeDate(s.completedAt)}
@@ -101,6 +109,7 @@ export function SessionsCard({
           return (
             <FavoriteRow
               key={s.slug}
+              slug={s.slug}
               type={s.type}
               name={s.name}
               duration={formatMMSS(totalSeconds)}
@@ -108,12 +117,13 @@ export function SessionsCard({
               expanded={expandedId === s.slug}
               onPress={() => toggleExpanded(s.slug)}
               onStart={() => onStartFavorite(s.slug)}
+              onToggleFavorite={() => onToggleFavorite(s.slug)}
               isLast={i === favoriteSessions.length - 1}
             />
           );
         })
       )}
-    </GlassCard>
+    </View>
   );
 }
 
@@ -141,6 +151,7 @@ function TabButton({ label, active, onPress }: TabButtonProps) {
 }
 
 type RecentRowProps = {
+  slug: string;
   type: SessionType;
   name: string;
   date: string;
@@ -154,6 +165,7 @@ type RecentRowProps = {
 };
 
 function RecentRow({
+  slug,
   type,
   name,
   date,
@@ -165,7 +177,7 @@ function RecentRow({
   onToggleFavorite,
   isLast,
 }: RecentRowProps) {
-  const Icon = TYPE_ICONS[type];
+  const Icon = iconFor(slug, type);
   const hasMovements = movements.length > 0;
   return (
     <View style={!isLast && styles.rowDivider}>
@@ -180,24 +192,22 @@ function RecentRow({
           ]}
         >
           <View style={styles.left}>
-            <Icon size={16} color={colors.dustyBlueDark} strokeWidth={2} />
-            <View>
+            <View style={styles.iconTile}>
+              <Icon size={16} color={colors.dustyBlueDark} strokeWidth={2} />
+            </View>
+            <View style={styles.nameWrap}>
               <Text style={styles.name}>{name}</Text>
               <Text style={styles.date}>{date}</Text>
             </View>
           </View>
-          <View style={styles.right}>
-            <Clock size={12} color={colors.dustyBlue} strokeWidth={2} />
-            <Text style={styles.duration}>{duration}</Text>
-            {hasMovements && (
-              <ChevronDown
-                size={14}
-                color={colors.gray400}
-                strokeWidth={2}
-                style={expanded ? styles.chevronOpen : styles.chevron}
-              />
-            )}
-          </View>
+          {hasMovements && (
+            <ChevronDown
+              size={14}
+              color={colors.gray400}
+              strokeWidth={2}
+              style={expanded ? styles.chevronOpen : styles.chevron}
+            />
+          )}
         </Pressable>
         <Pressable
           onPress={onToggleFavorite}
@@ -225,6 +235,13 @@ function RecentRow({
               <Text style={styles.movementDuration}>{formatMMSS(m.durationSeconds)}</Text>
             </View>
           ))}
+          <View style={styles.totalRow}>
+            <Text style={styles.totalLabel}>Total</Text>
+            <View style={styles.totalRight}>
+              <Clock size={12} color={colors.dustyBlue} strokeWidth={2} />
+              <Text style={styles.duration}>{duration}</Text>
+            </View>
+          </View>
         </View>
       )}
     </View>
@@ -232,6 +249,7 @@ function RecentRow({
 }
 
 type FavoriteRowProps = {
+  slug: string;
   type: SessionType;
   name: string;
   duration: string;
@@ -239,10 +257,12 @@ type FavoriteRowProps = {
   expanded: boolean;
   onPress: () => void;
   onStart: () => void;
+  onToggleFavorite: () => void;
   isLast: boolean;
 };
 
 function FavoriteRow({
+  slug,
   type,
   name,
   duration,
@@ -250,9 +270,10 @@ function FavoriteRow({
   expanded,
   onPress,
   onStart,
+  onToggleFavorite,
   isLast,
 }: FavoriteRowProps) {
-  const Icon = TYPE_ICONS[type];
+  const Icon = iconFor(slug, type);
   const hasMovements = movements.length > 0;
   return (
     <View style={!isLast && styles.rowDivider}>
@@ -267,23 +288,31 @@ function FavoriteRow({
           ]}
         >
           <View style={styles.favLeft}>
-            <Icon size={16} color={colors.dustyBlueDark} strokeWidth={2} />
+            <View style={styles.iconTile}>
+              <Icon size={16} color={colors.dustyBlueDark} strokeWidth={2} />
+            </View>
             <Text style={styles.name} numberOfLines={1}>
               {name}
             </Text>
           </View>
-          <View style={styles.right}>
-            <Clock size={12} color={colors.dustyBlue} strokeWidth={2} />
-            <Text style={styles.duration}>{duration}</Text>
-            {hasMovements && (
-              <ChevronDown
-                size={14}
-                color={colors.gray400}
-                strokeWidth={2}
-                style={expanded ? styles.chevronOpen : styles.chevron}
-              />
-            )}
-          </View>
+          {hasMovements && (
+            <ChevronDown
+              size={14}
+              color={colors.gray400}
+              strokeWidth={2}
+              style={expanded ? styles.chevronOpen : styles.chevron}
+            />
+          )}
+        </Pressable>
+        <Pressable
+          onPress={onToggleFavorite}
+          accessibilityRole="button"
+          accessibilityLabel={`Remove ${name} from favorites`}
+          accessibilityState={{ selected: true }}
+          hitSlop={10}
+          style={({ pressed }) => [styles.heartHit, pressed && styles.heartPressed]}
+        >
+          <Heart size={18} color={colors.coral} fill={colors.coral} strokeWidth={2} />
         </Pressable>
         <Pressable
           onPress={onStart}
@@ -305,6 +334,13 @@ function FavoriteRow({
               <Text style={styles.movementDuration}>{formatMMSS(m.duration)}</Text>
             </View>
           ))}
+          <View style={styles.totalRow}>
+            <Text style={styles.totalLabel}>Total</Text>
+            <View style={styles.totalRight}>
+              <Clock size={12} color={colors.dustyBlue} strokeWidth={2} />
+              <Text style={styles.duration}>{duration}</Text>
+            </View>
+          </View>
         </View>
       )}
     </View>
@@ -313,25 +349,33 @@ function FavoriteRow({
 
 const styles = StyleSheet.create({
   card: {
-    paddingVertical: spacing.s5,
-    paddingHorizontal: spacing.s6,
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+    borderRadius: 20,
+    paddingTop: 6,
+    paddingBottom: 10,
+    paddingHorizontal: 18,
   },
   tabs: {
     flexDirection: 'row',
-    gap: spacing.s5,
-    marginBottom: spacing.s3,
+    gap: spacing.s6,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.06)',
+    marginBottom: 4,
   },
   tab: {
-    paddingBottom: 6,
+    paddingTop: 10,
+    paddingBottom: 8,
   },
   tabPressed: {
     opacity: 0.6,
   },
   tabLabel: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 1.5,
+    letterSpacing: 1.2,
   },
   tabLabelActive: {
     color: colors.black,
@@ -340,8 +384,11 @@ const styles = StyleSheet.create({
     color: colors.gray400,
   },
   tabUnderline: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: -1,
     height: 2,
-    marginTop: 4,
     backgroundColor: 'transparent',
     borderRadius: 1,
   },
@@ -375,7 +422,20 @@ const styles = StyleSheet.create({
   left: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
+    flex: 1,
+    minWidth: 0,
+  },
+  iconTile: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: colors.dustyBlueMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  nameWrap: {
+    flexShrink: 1,
   },
   name: {
     fontSize: 15,
@@ -388,7 +448,23 @@ const styles = StyleSheet.create({
     color: colors.gray400,
     marginTop: 1,
   },
-  right: {
+  totalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 6,
+    marginTop: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(0,0,0,0.05)',
+  },
+  totalLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.gray400,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  totalRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
@@ -399,11 +475,11 @@ const styles = StyleSheet.create({
     color: colors.dustyBlue,
   },
   chevron: {
-    marginLeft: 4,
+    marginLeft: spacing.s2,
     transform: [{ rotate: '0deg' }],
   },
   chevronOpen: {
-    marginLeft: 4,
+    marginLeft: spacing.s2,
     transform: [{ rotate: '180deg' }],
   },
   heartHit: {
@@ -416,7 +492,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   expanded: {
-    paddingLeft: 26,
+    paddingLeft: 44,
     paddingRight: 2,
     paddingBottom: spacing.s3,
     paddingTop: 2,
@@ -442,7 +518,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
     paddingRight: spacing.s3,
   },
   playHit: {

@@ -12,9 +12,11 @@ import {
 import { GlassCard } from '../components/GlassCard';
 import { PrimaryButton } from '../components/PrimaryButton';
 import {
+  DailyChallenge,
   DailyChallengeMovementType,
   NewChallengeMovement,
   createChallenge,
+  updateChallengeGoals,
 } from '../data/dailyChallenge';
 import {
   requestNotificationPermission,
@@ -25,6 +27,10 @@ import { colors, radius, spacing, type as typeTokens } from '../theme/tokens';
 const NOTIF_PERMISSION_REQUESTED_KEY = 'lowlift:has_requested_notif_permission';
 
 type Props = {
+  // When non-null, the screen is in "edit" mode: form pre-populates from the
+  // current challenge and submit preserves completedReps via updateChallengeGoals.
+  // When null, the screen creates a fresh challenge via createChallenge.
+  existingChallenge: DailyChallenge | null;
   onComplete: () => void;
   onBack: () => void;
 };
@@ -37,6 +43,7 @@ type MovementDef = {
 const MOVEMENTS: MovementDef[] = [
   { type: 'pushups', name: 'Push Ups' },
   { type: 'squats', name: 'Squats' },
+  { type: 'situps', name: 'Sit Ups' },
   { type: 'burpees', name: 'Burpees' },
 ];
 
@@ -47,13 +54,55 @@ type MovementState = {
   goal: number;
 };
 
-export function DailyChallengeSetupScreen({ onComplete, onBack }: Props) {
-  const [state, setState] = useState<Record<DailyChallengeMovementType, MovementState>>({
+// Snap a free-form goal value to the nearest preset pill so editing an
+// existing challenge with a non-preset goal still highlights a button.
+function snapToPreset(goal: number): number {
+  let best: number = REP_GOALS[0];
+  let bestDist = Math.abs(goal - best);
+  for (const g of REP_GOALS) {
+    const d = Math.abs(goal - g);
+    if (d < bestDist) {
+      best = g;
+      bestDist = d;
+    }
+  }
+  return best;
+}
+
+function buildInitialState(
+  existing: DailyChallenge | null,
+): Record<DailyChallengeMovementType, MovementState> {
+  const defaults: Record<DailyChallengeMovementType, MovementState> = {
     pushups: { enabled: true, goal: 50 },
     squats: { enabled: true, goal: 50 },
+    situps: { enabled: true, goal: 50 },
     burpees: { enabled: true, goal: 50 },
-  });
-  const [repeatDaily, setRepeatDaily] = useState(true);
+  };
+  if (!existing) return defaults;
+  const next: Record<DailyChallengeMovementType, MovementState> = {
+    pushups: { enabled: false, goal: 50 },
+    squats: { enabled: false, goal: 50 },
+    situps: { enabled: false, goal: 50 },
+    burpees: { enabled: false, goal: 50 },
+  };
+  for (const m of existing.movements) {
+    next[m.type] = { enabled: true, goal: snapToPreset(m.goalReps) };
+  }
+  return next;
+}
+
+export function DailyChallengeSetupScreen({
+  existingChallenge,
+  onComplete,
+  onBack,
+}: Props) {
+  const isEditing = existingChallenge !== null;
+  const [state, setState] = useState<Record<DailyChallengeMovementType, MovementState>>(
+    () => buildInitialState(existingChallenge),
+  );
+  const [repeatDaily, setRepeatDaily] = useState(
+    existingChallenge ? existingChallenge.repeatDaily : true,
+  );
   const [showError, setShowError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -71,7 +120,7 @@ export function DailyChallengeSetupScreen({ onComplete, onBack }: Props) {
     setState((prev) => ({ ...prev, [type]: { ...prev[type], goal } }));
   };
 
-  const handleStart = async () => {
+  const handleSubmit = async () => {
     if (selectedCount === 0) {
       setShowError(true);
       return;
@@ -82,24 +131,31 @@ export function DailyChallengeSetupScreen({ onComplete, onBack }: Props) {
       .filter((m) => state[m.type].enabled)
       .map((m) => ({ type: m.type, goalReps: state[m.type].goal }));
     try {
-      const challenge = await createChallenge(movements, repeatDaily);
-      try {
-        const alreadyAsked = await AsyncStorage.getItem(NOTIF_PERMISSION_REQUESTED_KEY);
-        if (alreadyAsked !== '1') {
-          await AsyncStorage.setItem(NOTIF_PERMISSION_REQUESTED_KEY, '1');
-          const granted = await requestNotificationPermission();
-          if (granted) {
+      if (isEditing) {
+        // Edit path: preserve completedReps and id; do not re-prompt for
+        // notification permission or re-schedule (the active challenge already
+        // owns its notification IDs).
+        await updateChallengeGoals(movements, repeatDaily);
+      } else {
+        const challenge = await createChallenge(movements, repeatDaily);
+        try {
+          const alreadyAsked = await AsyncStorage.getItem(NOTIF_PERMISSION_REQUESTED_KEY);
+          if (alreadyAsked !== '1') {
+            await AsyncStorage.setItem(NOTIF_PERMISSION_REQUESTED_KEY, '1');
+            const granted = await requestNotificationPermission();
+            if (granted) {
+              await scheduleChallengeNotifications(challenge);
+            }
+          } else {
             await scheduleChallengeNotifications(challenge);
           }
-        } else {
-          await scheduleChallengeNotifications(challenge);
+        } catch (err) {
+          console.warn('[daily-challenge] notification setup failed:', err);
         }
-      } catch (err) {
-        console.warn('[daily-challenge] notification setup failed:', err);
       }
       onComplete();
     } catch (err) {
-      console.warn('[daily-challenge] createChallenge failed:', err);
+      console.warn('[daily-challenge] submit failed:', err);
       setSubmitting(false);
     }
   };
@@ -114,9 +170,13 @@ export function DailyChallengeSetupScreen({ onComplete, onBack }: Props) {
           <View style={styles.headerSpacer} />
 
           <View style={styles.header}>
-            <Text style={styles.headline}>Daily Challenge</Text>
+            <Text style={styles.headline}>
+              {isEditing ? 'Edit Challenge' : 'Daily Challenge'}
+            </Text>
             <Text style={styles.subtext}>
-              Pick your movements and reps. We'll split them across sessions.
+              {isEditing
+                ? "Update your goals. Your progress for today carries over."
+                : "Pick your movements and target reps for the day."}
             </Text>
           </View>
 
@@ -191,7 +251,10 @@ export function DailyChallengeSetupScreen({ onComplete, onBack }: Props) {
         </ScrollView>
 
         <View style={styles.footer}>
-          <PrimaryButton label="Start Challenge" onPress={handleStart} />
+          <PrimaryButton
+            label={isEditing ? 'Save Changes' : 'Start Challenge'}
+            onPress={handleSubmit}
+          />
           <Pressable
             accessibilityRole="link"
             onPress={onBack}
@@ -200,7 +263,7 @@ export function DailyChallengeSetupScreen({ onComplete, onBack }: Props) {
           >
             {({ pressed }) => (
               <Text style={[styles.backLabel, pressed && styles.backLabelPressed]}>
-                Back to Dashboard
+                {isEditing ? 'Cancel' : 'Back to Dashboard'}
               </Text>
             )}
           </Pressable>
@@ -242,27 +305,29 @@ const styles = StyleSheet.create({
     gap: spacing.s3,
   },
   cardInner: {
-    paddingVertical: spacing.s5,
-    paddingHorizontal: spacing.s5,
+    paddingVertical: spacing.s4,
+    paddingHorizontal: spacing.s4,
   },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    minHeight: 32,
+    minHeight: 28,
   },
   movementName: {
-    ...typeTokens.h3,
+    fontSize: 18,
+    fontWeight: '600',
+    letterSpacing: -0.2,
     color: colors.white,
   },
   pillRow: {
     flexDirection: 'row',
     gap: spacing.s2,
-    marginTop: spacing.s4,
+    marginTop: spacing.s3,
   },
   pill: {
     flex: 1,
-    minHeight: 44,
+    minHeight: 38,
     borderRadius: radius.full,
     backgroundColor: 'rgba(255,255,255,0.08)',
     borderWidth: 1,
@@ -278,7 +343,7 @@ const styles = StyleSheet.create({
     borderColor: colors.volt,
   },
   pillLabel: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: colors.white,
   },

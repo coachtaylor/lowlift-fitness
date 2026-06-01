@@ -20,6 +20,7 @@ const DAILY_REMINDER_MINUTE = 0;
 const MOVEMENT_DISPLAY_NAMES: Record<DailyChallengeMovementType, string> = {
   pushups: 'push ups',
   squats: 'squats',
+  situps: 'sit ups',
   burpees: 'burpees',
 };
 

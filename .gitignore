@@ -34,8 +34,38 @@ yarn-error.*
 supabase/.temp/
 supabase/.branches/
 
+# Claude Code (local state) — ignore the whole local dir
+.claude/
+
 # Documents (design specs, PRDs — kept locally, not committed)
 LowLift_Design_System.html
 LowLift_Design_System.md
 LowLift_Fitness_Feature_Specs.docx
 LowLift_Fitness_MVP_PRD.docx
+
+# Raw source art & exports (kept locally, not committed)
+ChatGPT Image*.png
+*.jpeg
+*.jpg
+*.zip
+*.pdf
+*.docx
+
+# Marketing / spec scratch docs (kept locally)
+CASE_STUDY_v2_CORRECTED.md
+Challenge_History_DevHandoff.md
+LANDING-PAGE-BRIEF.md
+LOWLIFT_PRODUCT_DECISIONS.md
+Progress_Insights_Spec.md
+Progress_Insights_UX_Copy.md
+SESSION_PLAYER_REDESIGN_BRIEF.md
+faceless-youtube-market-analysis.md
+pulse-checks/
+
+# Screenshots, working folders, web export dirs (kept locally)
+screenshots/
+llf ss/
+session-player-redesign-assets/
+LowLift Fitness Website/
+LowLift Fitness Website1/
+website/

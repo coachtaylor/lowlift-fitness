@@ -1,14 +1,32 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
+  markChallengeComplete,
+  recordSessionProgress,
+  upsertDailyChallenge,
+} from './dailyChallengeHistory';
+import {
   cancelChallengeNotifications,
   cancelDailyReminder,
   scheduleChallengeNotifications,
   scheduleDailyReminder,
 } from './notifications';
+import { supabase } from './supabase';
 
-const KEY = 'lowlift:active_daily_challenge';
+const KEY_BASE = 'lowlift:active_daily_challenge';
 
-export type DailyChallengeMovementType = 'pushups' | 'squats' | 'burpees';
+// The active daily challenge is device-local (AsyncStorage), so its storage key
+// MUST be scoped per user — otherwise a different account on the same device
+// inherits the previous user's challenge (e.g. a brand-new user seeing
+// "Challenge complete" they never set up). Resolved via getSession() (local,
+// offline-safe). Returns null when there's no signed-in user, in which case
+// reads return nothing and writes no-op.
+async function challengeKey(): Promise<string | null> {
+  const { data } = await supabase.auth.getSession();
+  const userId = data.session?.user?.id;
+  return userId ? `${KEY_BASE}:${userId}` : null;
+}
+
+export type DailyChallengeMovementType = 'pushups' | 'squats' | 'situps' | 'burpees';
 
 export type DailyChallengeMovement = {
   type: DailyChallengeMovementType;
@@ -39,6 +57,7 @@ export type NewChallengeMovement = {
 const MAX_REPS_PER_SESSION: Record<DailyChallengeMovementType, number> = {
   pushups: 12,
   squats: 20,
+  situps: 20,
   burpees: 10,
 };
 const MIN_SESSIONS_PER_DAY = 3;
@@ -59,7 +78,10 @@ function isValidMovement(value: unknown): value is DailyChallengeMovement {
   if (!value || typeof value !== 'object') return false;
   const m = value as Partial<DailyChallengeMovement>;
   return (
-    (m.type === 'pushups' || m.type === 'squats' || m.type === 'burpees') &&
+    (m.type === 'pushups' ||
+      m.type === 'squats' ||
+      m.type === 'situps' ||
+      m.type === 'burpees') &&
     typeof m.goalReps === 'number' &&
     typeof m.completedReps === 'number'
   );
@@ -81,12 +103,16 @@ function isValidChallenge(value: unknown): value is DailyChallenge {
 }
 
 async function persist(challenge: DailyChallenge): Promise<void> {
-  await AsyncStorage.setItem(KEY, JSON.stringify(challenge));
+  const key = await challengeKey();
+  if (!key) return;
+  await AsyncStorage.setItem(key, JSON.stringify(challenge));
 }
 
 export async function loadChallenge(): Promise<DailyChallenge | null> {
   try {
-    const raw = await AsyncStorage.getItem(KEY);
+    const key = await challengeKey();
+    if (!key) return null;
+    const raw = await AsyncStorage.getItem(key);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!isValidChallenge(parsed)) return null;
@@ -115,11 +141,53 @@ export async function createChallenge(
   };
   await persist(challenge);
   await cancelDailyReminder();
+  void upsertDailyChallenge(challenge);
   return challenge;
 }
 
+// Mutate the goals / movement set / repeat flag of an existing challenge
+// WITHOUT resetting progress. completedReps for movements the user kept are
+// preserved (clamped down only if the new goal is lower than what they had).
+// Removed movements drop entirely; newly added movements start at 0.
+export async function updateChallengeGoals(
+  movements: NewChallengeMovement[],
+  repeatDaily: boolean,
+): Promise<DailyChallenge | null> {
+  const current = await loadChallenge();
+  if (!current) return null;
+
+  const priorByType = new Map<DailyChallengeMovementType, number>();
+  for (const m of current.movements) {
+    priorByType.set(m.type, m.completedReps);
+  }
+
+  const nextMovements: DailyChallengeMovement[] = movements.map((m) => {
+    const priorReps = priorByType.get(m.type) ?? 0;
+    return {
+      type: m.type,
+      goalReps: m.goalReps,
+      completedReps: Math.min(m.goalReps, priorReps),
+    };
+  });
+
+  const isComplete =
+    nextMovements.length > 0 &&
+    nextMovements.every((m) => m.completedReps >= m.goalReps);
+
+  const next: DailyChallenge = {
+    ...current,
+    movements: nextMovements,
+    repeatDaily,
+    isComplete,
+  };
+  await persist(next);
+  void upsertDailyChallenge(next);
+  return next;
+}
+
 export async function deleteChallenge(): Promise<void> {
-  await AsyncStorage.removeItem(KEY);
+  const key = await challengeKey();
+  if (key) await AsyncStorage.removeItem(key);
   await scheduleDailyReminder();
 }
 
@@ -159,6 +227,7 @@ export async function completeSession(
   });
 
   const isComplete = movements.every((m) => m.completedReps >= m.goalReps);
+  const wasComplete = current.isComplete;
 
   const next: DailyChallenge = {
     ...current,
@@ -169,6 +238,10 @@ export async function completeSession(
   await persist(next);
   if (isComplete) {
     await cancelChallengeNotifications();
+  }
+  void recordSessionProgress(next);
+  if (!wasComplete && isComplete) {
+    void markChallengeComplete(next);
   }
   return next;
 }
@@ -185,11 +258,83 @@ export async function resetForNewDay(): Promise<DailyChallenge | null> {
   };
   await persist(next);
   await scheduleChallengeNotifications(next);
+  void upsertDailyChallenge(next);
   return next;
 }
 
 export function isNewDay(challenge: DailyChallenge, now: number = Date.now()): boolean {
   return challenge.lastActiveDate !== todayString(now);
+}
+
+// ─── Manual rep increments ──────────────────────────────────────────────
+// The redesigned Challenge screen lets users add reps directly (+/-) instead
+// of routing every increment through a guided session. Writes are local-first
+// (instant persist to AsyncStorage) and the server flush is debounced so a
+// burst of taps collapses into one Supabase round-trip.
+
+const PROGRESS_FLUSH_DELAY_MS = 2000;
+let progressFlushTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingProgressChallenge: DailyChallenge | null = null;
+
+function scheduleProgressFlush(challenge: DailyChallenge): void {
+  pendingProgressChallenge = challenge;
+  if (progressFlushTimer) clearTimeout(progressFlushTimer);
+  progressFlushTimer = setTimeout(() => {
+    const toFlush = pendingProgressChallenge;
+    pendingProgressChallenge = null;
+    progressFlushTimer = null;
+    if (toFlush) void recordSessionProgress(toFlush);
+  }, PROGRESS_FLUSH_DELAY_MS);
+}
+
+// Force-flush any pending rep increments. Call on app background and on
+// challenge-tab blur so unsynced taps don't sit in the timer forever.
+export async function flushPendingProgress(): Promise<void> {
+  if (progressFlushTimer) {
+    clearTimeout(progressFlushTimer);
+    progressFlushTimer = null;
+  }
+  const toFlush = pendingProgressChallenge;
+  pendingProgressChallenge = null;
+  if (toFlush) await recordSessionProgress(toFlush);
+}
+
+export async function incrementMovementReps(
+  movementType: DailyChallengeMovementType,
+  delta: number,
+): Promise<DailyChallenge | null> {
+  if (delta === 0) return null;
+  const current = await loadChallenge();
+  if (!current) return null;
+
+  const movements = current.movements.map((m) =>
+    m.type === movementType
+      ? {
+          ...m,
+          completedReps: Math.max(0, Math.min(m.goalReps, m.completedReps + delta)),
+        }
+      : m,
+  );
+
+  const isComplete = movements.every((m) => m.completedReps >= m.goalReps);
+  const wasComplete = current.isComplete;
+
+  const next: DailyChallenge = {
+    ...current,
+    movements,
+    isComplete,
+  };
+  await persist(next);
+
+  if (isComplete && !wasComplete) {
+    // First time crossing into complete: cancel today's reminder notifications
+    // and tell the server right away — this is the milestone moment.
+    await cancelChallengeNotifications();
+    void markChallengeComplete(next);
+  }
+
+  scheduleProgressFlush(next);
+  return next;
 }
 
 export function calculateSessionReps(challenge: DailyChallenge): SessionRepPlan[] {

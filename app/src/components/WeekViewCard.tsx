@@ -1,25 +1,32 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { WeekDay } from '../data/history';
 import { colors, radius, spacing } from '../theme/tokens';
-import { GlassCard } from './GlassCard';
+
+const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 type Props = {
   days: WeekDay[];
 };
 
 export function WeekViewCard({ days }: Props) {
+  const todayIndex = days.findIndex((d) => d.isToday);
+  const todayCaption = todayIndex >= 0 ? `${DAY_NAMES[todayIndex]} · today` : '';
+
   return (
-    <GlassCard contentStyle={styles.card}>
-      <Text style={styles.label}>This Week</Text>
+    <View style={styles.card}>
+      <View style={styles.topRow}>
+        <Text style={styles.label}>This Week</Text>
+        {!!todayCaption && <Text style={styles.caption}>{todayCaption}</Text>}
+      </View>
       <View style={styles.row}>
         {days.map((d, i) => (
-          <View key={i} style={styles.col}>
-            <Text style={styles.dayLabel}>{d.letter}</Text>
+          <View key={i} style={[styles.col, d.isToday && styles.colToday]}>
+            <Text style={[styles.dayLabel, d.isToday && styles.dayLabelToday]}>{d.letter}</Text>
             <View style={[styles.dot, dotStyle(d)]} />
           </View>
         ))}
       </View>
-    </GlassCard>
+    </View>
   );
 }
 
@@ -41,25 +48,35 @@ function dotStyle(d: WeekDay) {
       borderWidth: 2,
     };
   }
-  if (d.inFuture) {
-    return { backgroundColor: colors.gray100 };
-  }
   return { backgroundColor: colors.gray100 };
 }
 
 const styles = StyleSheet.create({
   card: {
-    paddingVertical: spacing.s5,
-    paddingHorizontal: spacing.s6,
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+    borderRadius: 20,
+    paddingVertical: spacing.s4,
+    paddingHorizontal: 18,
+  },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.s4,
   },
   label: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 1.5,
+    letterSpacing: 1.4,
     color: colors.gray400,
-    textAlign: 'center',
-    marginBottom: spacing.s4,
+  },
+  caption: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: colors.gray400,
   },
   row: {
     flexDirection: 'row',
@@ -70,10 +87,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.s2,
   },
+  colToday: {},
   dayLabel: {
     fontSize: 11,
     fontWeight: '600',
     color: colors.gray400,
+  },
+  dayLabelToday: {
+    color: colors.black,
   },
   dot: {
     width: 28,

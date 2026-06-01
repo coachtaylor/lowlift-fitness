@@ -13,14 +13,13 @@ import { ProgressDots } from '../components/ProgressDots';
 import {
   DailyChallenge,
   DailyChallengeMovementType,
-  SessionRepPlan,
   calculateSessionReps,
   completeSession,
-  loadChallenge,
 } from '../data/dailyChallenge';
 import { colors, radius, spacing } from '../theme/tokens';
 
 type Props = {
+  challenge: DailyChallenge | null;
   onFinish: (
     updated: DailyChallenge | null,
     sessionReps: Partial<Record<DailyChallengeMovementType, number>>,
@@ -31,6 +30,7 @@ type Props = {
 const MOVEMENT_LABELS: Record<DailyChallengeMovementType, string> = {
   pushups: 'Push Ups',
   squats: 'Squats',
+  situps: 'Sit Ups',
   burpees: 'Burpees',
 };
 
@@ -47,43 +47,26 @@ function coachingText(type: DailyChallengeMovementType, reps: number): string {
       return `Drop down and give yourself ${r}. Steady pace, breathe through it.`;
     case 'squats':
       return `Plant your feet, sit back, and power through ${r}. You set the tempo.`;
+    case 'situps':
+      return `Lie back, brace your core, and crunch out ${r}. Controlled, not rushed.`;
     case 'burpees':
       return `Full send for ${r}. Drop, push, jump. You know the drill.`;
   }
 }
 
-export function ChallengeSessionScreen({ onFinish, onExit }: Props) {
-  const [challenge, setChallenge] = useState<DailyChallenge | null>(null);
-  const [plan, setPlan] = useState<SessionRepPlan[]>([]);
+export function ChallengeSessionScreen({ challenge, onFinish, onExit }: Props) {
+  const plan = useMemo(
+    () =>
+      challenge
+        ? calculateSessionReps(challenge).filter((p) => p.repsThisSession > 0)
+        : [],
+    [challenge],
+  );
   const [index, setIndex] = useState(0);
   const [canAdvance, setCanAdvance] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const contentOpacity = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const c = await loadChallenge();
-      if (cancelled) return;
-      if (!c) {
-        onExit();
-        return;
-      }
-      const sessionPlan = calculateSessionReps(c).filter(
-        (p) => p.repsThisSession > 0,
-      );
-      if (sessionPlan.length === 0) {
-        onExit();
-        return;
-      }
-      setChallenge(c);
-      setPlan(sessionPlan);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [onExit]);
 
   // Lock the Next button briefly when the movement changes.
   useEffect(() => {
@@ -102,7 +85,31 @@ export function ChallengeSessionScreen({ onFinish, onExit }: Props) {
   }, [plan]);
 
   if (!challenge || plan.length === 0) {
-    return <SafeAreaView style={styles.safe} />;
+    const headline = !challenge
+      ? 'No active challenge.'
+      : "You're already done for today.";
+    const body = !challenge
+      ? 'Set one up to get going.'
+      : 'Nice work. Come back tomorrow.';
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={[styles.container, styles.fallbackContainer]}>
+          <Text style={styles.fallbackHeadline}>{headline}</Text>
+          <Text style={styles.fallbackBody}>{body}</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back to dashboard"
+            onPress={onExit}
+            style={({ pressed }) => [
+              styles.cta,
+              pressed && { transform: [{ scale: 0.97 }] },
+            ]}
+          >
+            <Text style={styles.ctaLabel}>Back to dashboard</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
   }
 
   const total = plan.length;
@@ -290,5 +297,23 @@ const styles = StyleSheet.create({
     color: colors.black,
     fontSize: 18,
     fontWeight: '700',
+  },
+  fallbackContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.s3,
+  },
+  fallbackHeadline: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: colors.white,
+    textAlign: 'center',
+    letterSpacing: -0.5,
+  },
+  fallbackBody: {
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.6)',
+    textAlign: 'center',
+    marginBottom: spacing.s6,
   },
 });

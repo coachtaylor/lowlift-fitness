@@ -17,6 +17,7 @@ type Props = {
 const MOVEMENT_LABELS: Record<DailyChallengeMovementType, string> = {
   pushups: 'push ups',
   squats: 'squats',
+  situps: 'sit ups',
   burpees: 'burpees',
 };
 

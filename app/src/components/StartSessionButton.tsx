@@ -5,16 +5,17 @@ import { colors, easing, motion, radius, spacing } from '../theme/tokens';
 
 type Props = {
   onPress: () => void;
+  label?: string;
 };
 
-export function StartSessionButton({ onPress }: Props) {
+export function StartSessionButton({ onPress, label = 'Start session' }: Props) {
   const scale = useRef(new Animated.Value(1)).current;
 
   return (
     <Animated.View style={{ transform: [{ scale }] }}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Start session"
+        accessibilityLabel={label}
         onPress={onPress}
         onPressIn={() =>
           Animated.timing(scale, {
@@ -38,7 +39,7 @@ export function StartSessionButton({ onPress }: Props) {
         ]}
       >
         <Play size={20} color={colors.black} strokeWidth={2} fill={colors.black} />
-        <Text style={styles.label}>Start session</Text>
+        <Text style={styles.label}>{label}</Text>
       </Pressable>
     </Animated.View>
   );

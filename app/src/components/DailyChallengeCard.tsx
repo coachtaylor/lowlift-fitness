@@ -1,28 +1,30 @@
 import { Check, Plus } from 'lucide-react-native';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Svg, { Circle } from 'react-native-svg';
 import { DailyChallenge, DailyChallengeMovementType } from '../data/dailyChallenge';
-import { colors, radius, spacing, type as typeTokens } from '../theme/tokens';
+import { colors, radius, spacing } from '../theme/tokens';
 import { GlassCard } from './GlassCard';
-import { PrimaryButton } from './PrimaryButton';
+
+const RING_SIZE = 184;
+const RING_STROKE = 14;
+const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
 const MOVEMENT_LABELS: Record<DailyChallengeMovementType, string> = {
   pushups: 'Push Ups',
   squats: 'Squats',
+  situps: 'Sit Ups',
   burpees: 'Burpees',
 };
 
 type Props = {
   challenge: DailyChallenge | null;
   onSetup: () => void;
-  onEdit: () => void;
-  onStartSession: () => void;
 };
 
 export function DailyChallengeCard({
   challenge,
   onSetup,
-  onEdit,
-  onStartSession,
 }: Props) {
   if (!challenge) {
     return (
@@ -42,30 +44,61 @@ export function DailyChallengeCard({
     );
   }
 
-  const totalRemaining = challenge.movements.reduce(
-    (sum, m) => sum + Math.max(0, m.goalReps - m.completedReps),
+  const totalGoal = challenge.movements.reduce((sum, m) => sum + m.goalReps, 0);
+  const totalDone = challenge.movements.reduce(
+    (sum, m) => sum + Math.min(m.goalReps, m.completedReps),
     0,
   );
+  const totalRemaining = Math.max(0, totalGoal - totalDone);
   const allComplete = challenge.isComplete || totalRemaining === 0;
+  const ratio = totalGoal > 0 ? Math.min(1, totalDone / totalGoal) : 0;
+  const dashOffset = RING_CIRCUMFERENCE * (1 - ratio);
 
   return (
     <GlassCard contentStyle={styles.activeCard}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Daily Challenge</Text>
-        <Pressable
-          onPress={onEdit}
-          accessibilityRole="link"
-          accessibilityLabel="Edit daily challenge"
-          hitSlop={10}
-          style={({ pressed }) => [styles.editHit, pressed && styles.pressed]}
-        >
-          <Text style={styles.editLabel}>Edit</Text>
-        </Pressable>
+      <View style={styles.ringWrap}>
+        <Svg width={RING_SIZE} height={RING_SIZE}>
+          <Circle
+            cx={RING_SIZE / 2}
+            cy={RING_SIZE / 2}
+            r={RING_RADIUS}
+            stroke={colors.gray200}
+            strokeWidth={RING_STROKE}
+            fill="none"
+          />
+          <Circle
+            cx={RING_SIZE / 2}
+            cy={RING_SIZE / 2}
+            r={RING_RADIUS}
+            stroke={colors.volt}
+            strokeWidth={RING_STROKE}
+            strokeLinecap="round"
+            strokeDasharray={`${RING_CIRCUMFERENCE} ${RING_CIRCUMFERENCE}`}
+            strokeDashoffset={dashOffset}
+            fill="none"
+            transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
+          />
+        </Svg>
+        <View style={styles.ringCenter} pointerEvents="none">
+          {allComplete ? (
+            <>
+              <View style={styles.checkBadge}>
+                <Check size={20} color={colors.black} strokeWidth={3} />
+              </View>
+              <Text style={styles.completeLabel}>Crushed it.</Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.ringNumber}>{totalDone}</Text>
+              <Text style={styles.ringLabel}>of {totalGoal} reps</Text>
+            </>
+          )}
+        </View>
       </View>
 
       <View style={styles.bars}>
         {challenge.movements.map((m) => {
-          const ratio = m.goalReps > 0 ? Math.min(1, m.completedReps / m.goalReps) : 0;
+          const r = m.goalReps > 0 ? Math.min(1, m.completedReps / m.goalReps) : 0;
           const done = m.completedReps >= m.goalReps;
           return (
             <View key={m.type} style={styles.barRow}>
@@ -76,30 +109,12 @@ export function DailyChallengeCard({
                 </Text>
               </View>
               <View style={styles.track}>
-                <View style={[styles.fill, { width: `${ratio * 100}%` }]} />
+                <View style={[styles.fill, { width: `${r * 100}%` }]} />
               </View>
             </View>
           );
         })}
       </View>
-
-      {allComplete ? (
-        <View style={styles.completeRow}>
-          <View style={styles.checkBadge}>
-            <Check size={16} color={colors.black} strokeWidth={3} />
-          </View>
-          <Text style={styles.completeLabel}>Complete!</Text>
-        </View>
-      ) : (
-        <>
-          <Text style={styles.remaining}>
-            {totalRemaining} {totalRemaining === 1 ? 'rep' : 'reps'} remaining
-          </Text>
-          <View style={styles.cta}>
-            <PrimaryButton label="Do a session" onPress={onStartSession} />
-          </View>
-        </>
-      )}
     </GlassCard>
   );
 }
@@ -129,32 +144,35 @@ const styles = StyleSheet.create({
     color: colors.black,
   },
   activeCard: {
-    paddingVertical: spacing.s5,
+    paddingVertical: spacing.s8,
     paddingHorizontal: spacing.s6,
+    alignItems: 'stretch',
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  ringWrap: {
     alignItems: 'center',
-    marginBottom: spacing.s4,
+    justifyContent: 'center',
+    marginBottom: spacing.s8,
   },
-  title: {
-    fontSize: 16,
-    fontWeight: '700',
+  ringCenter: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ringNumber: {
+    fontSize: 56,
+    fontWeight: '900',
     color: colors.black,
-    letterSpacing: -0.2,
+    letterSpacing: -3,
+    lineHeight: 56,
   },
-  editHit: {
-    paddingVertical: spacing.s1,
-    paddingLeft: spacing.s3,
-  },
-  editLabel: {
+  ringLabel: {
     fontSize: 13,
-    fontWeight: '600',
-    color: colors.dustyBlueDark,
+    fontWeight: '500',
+    color: colors.gray500,
+    marginTop: spacing.s2,
   },
   bars: {
-    gap: spacing.s3,
+    gap: spacing.s4,
   },
   barRow: {
     gap: 6,
@@ -179,7 +197,7 @@ const styles = StyleSheet.create({
     color: colors.black,
   },
   track: {
-    height: 8,
+    height: 10,
     borderRadius: radius.full,
     backgroundColor: colors.gray200,
     overflow: 'hidden',
@@ -189,31 +207,19 @@ const styles = StyleSheet.create({
     backgroundColor: colors.volt,
     borderRadius: radius.full,
   },
-  remaining: {
-    ...typeTokens.caption,
-    color: colors.gray500,
-    marginTop: spacing.s4,
-  },
-  cta: {
-    marginTop: spacing.s4,
-  },
-  completeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.s2,
-    marginTop: spacing.s4,
-  },
   checkBadge: {
-    width: 24,
-    height: 24,
+    width: 40,
+    height: 40,
     borderRadius: radius.full,
     backgroundColor: colors.volt,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: spacing.s2,
   },
   completeLabel: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '700',
     color: colors.black,
+    letterSpacing: -0.3,
   },
 });

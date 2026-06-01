@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 
 export type MovementCategory = 'move' | 'stretch';
+export type BodyArea = 'full' | 'lower' | 'upper' | 'core' | 'mobility';
 
 export type Movement = {
   id: string;
@@ -8,6 +9,7 @@ export type Movement = {
   name: string;
   category: MovementCategory;
   subcategory: string | null;
+  bodyArea: BodyArea;
   duration: number;
   difficulty: number;
   steps: string[];
@@ -26,7 +28,7 @@ export async function loadMovements(): Promise<Map<string, Movement>> {
     const { data, error } = await supabase
       .from('movements')
       .select(
-        'id, slug, name, category, subcategory, default_duration_seconds, difficulty, steps, cues, video_url, thumb_url',
+        'id, slug, name, category, subcategory, body_area, default_duration_seconds, difficulty, steps, cues, video_url, thumb_url',
       )
       .eq('is_active', true);
     if (error) {
@@ -42,6 +44,7 @@ export async function loadMovements(): Promise<Map<string, Movement>> {
         name: row.name,
         category: row.category as MovementCategory,
         subcategory: row.subcategory ?? null,
+        bodyArea: (row.body_area ?? 'full') as BodyArea,
         duration: row.default_duration_seconds,
         difficulty: row.difficulty,
         steps: row.steps ?? [],

@@ -1,173 +1,191 @@
+import { Check } from 'lucide-react-native';
 import { useEffect, useRef } from 'react';
-import { Animated, Easing, SafeAreaView, StyleSheet, Text, View } from 'react-native';
-import { GlassCard } from '../components/GlassCard';
-import { PrimaryButton } from '../components/PrimaryButton';
-import { SecondaryButton } from '../components/SecondaryButton';
 import {
-  DailyChallenge,
-  DailyChallengeMovementType,
-} from '../data/dailyChallenge';
+  Animated,
+  Easing,
+  Pressable,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { colors, easing, radius, spacing } from '../theme/tokens';
 
 type Props = {
-  challenge: DailyChallenge;
-  onSetTomorrow: () => void;
-  onBackToDashboard: () => void;
+  onDismiss: () => void;
 };
 
-const MOVEMENT_LABELS: Record<DailyChallengeMovementType, string> = {
-  pushups: 'push ups',
-  squats: 'squats',
-  burpees: 'burpees',
-};
+// Brief dramatic arrival on completion. Fades in over 400ms, holds for ~1.8s,
+// fades out over 400ms, then calls onDismiss. The Challenge tab now owns the
+// post-completion resting state (OptionDone), so this screen has no buttons —
+// just the moment. Tap anywhere to skip ahead.
+const ENTRY_MS = 400;
+const HOLD_MS = 1800;
+const EXIT_MS = 400;
+const TOTAL_MS = ENTRY_MS + HOLD_MS + EXIT_MS;
 
-function formatBreakdown(challenge: DailyChallenge): string {
-  return challenge.movements
-    .map((m) => `${m.goalReps} ${MOVEMENT_LABELS[m.type]}`)
-    .join(', ');
-}
-
-export function ChallengeCelebrationScreen({
-  challenge,
-  onSetTomorrow,
-  onBackToDashboard,
-}: Props) {
-  const totalReps = challenge.movements.reduce((a, m) => a + m.goalReps, 0);
-  const breakdown = formatBreakdown(challenge);
-  const repeatDaily = challenge.repeatDaily;
-
-  const bgOpacity = useRef(new Animated.Value(0)).current;
+export function ChallengeCelebrationScreen({ onDismiss }: Props) {
+  const screenOpacity = useRef(new Animated.Value(0)).current;
   const haloOpacity = useRef(new Animated.Value(0)).current;
-  const haloScale = useRef(new Animated.Value(0.8)).current;
+  const haloScale = useRef(new Animated.Value(0.85)).current;
+  const checkOpacity = useRef(new Animated.Value(0)).current;
+  const checkScale = useRef(new Animated.Value(0.5)).current;
   const headlineOpacity = useRef(new Animated.Value(0)).current;
   const headlineY = useRef(new Animated.Value(12)).current;
-  const cardOpacity = useRef(new Animated.Value(0)).current;
-  const cardY = useRef(new Animated.Value(8)).current;
-  const repeatOpacity = useRef(new Animated.Value(0)).current;
-  const primaryOpacity = useRef(new Animated.Value(0)).current;
-  const primaryY = useRef(new Animated.Value(8)).current;
-  const secondaryOpacity = useRef(new Animated.Value(0)).current;
-  const secondaryY = useRef(new Animated.Value(8)).current;
+  const subOpacity = useRef(new Animated.Value(0)).current;
+
+  const dismissedRef = useRef(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const dismiss = () => {
+    if (dismissedRef.current) return;
+    dismissedRef.current = true;
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    Animated.timing(screenOpacity, {
+      toValue: 0,
+      duration: EXIT_MS,
+      easing: Easing.bezier(...easing.default),
+      useNativeDriver: true,
+    }).start(() => onDismiss());
+  };
 
   useEffect(() => {
     const ease = Easing.bezier(...easing.default);
-    const fadeIn = (val: Animated.Value, duration: number) =>
-      Animated.timing(val, { toValue: 1, duration, easing: ease, useNativeDriver: true });
-    const slideTo0 = (val: Animated.Value, duration: number) =>
-      Animated.timing(val, { toValue: 0, duration, easing: ease, useNativeDriver: true });
-    const delay = (ms: number) => Animated.delay(ms);
+    const bounce = Easing.bezier(...easing.bounce);
 
     Animated.parallel([
-      fadeIn(bgOpacity, 300),
-      Animated.sequence([
-        delay(100),
-        Animated.parallel([fadeIn(haloOpacity, 400), Animated.timing(haloScale, {
+      Animated.timing(screenOpacity, {
+        toValue: 1,
+        duration: 200,
+        easing: ease,
+        useNativeDriver: true,
+      }),
+      Animated.parallel([
+        Animated.timing(haloOpacity, {
           toValue: 1,
-          duration: 400,
+          duration: ENTRY_MS,
           easing: ease,
           useNativeDriver: true,
-        })]),
+        }),
+        Animated.timing(haloScale, {
+          toValue: 1,
+          duration: ENTRY_MS,
+          easing: bounce,
+          useNativeDriver: true,
+        }),
       ]),
       Animated.sequence([
-        delay(250),
-        Animated.parallel([fadeIn(headlineOpacity, 350), slideTo0(headlineY, 350)]),
+        Animated.delay(150),
+        Animated.parallel([
+          Animated.timing(checkOpacity, {
+            toValue: 1,
+            duration: 280,
+            easing: ease,
+            useNativeDriver: true,
+          }),
+          Animated.timing(checkScale, {
+            toValue: 1,
+            duration: 320,
+            easing: bounce,
+            useNativeDriver: true,
+          }),
+        ]),
       ]),
       Animated.sequence([
-        delay(550),
-        Animated.parallel([fadeIn(cardOpacity, 300), slideTo0(cardY, 300)]),
+        Animated.delay(280),
+        Animated.parallel([
+          Animated.timing(headlineOpacity, {
+            toValue: 1,
+            duration: 320,
+            easing: ease,
+            useNativeDriver: true,
+          }),
+          Animated.timing(headlineY, {
+            toValue: 0,
+            duration: 320,
+            easing: ease,
+            useNativeDriver: true,
+          }),
+        ]),
       ]),
-      Animated.sequence([delay(800), fadeIn(repeatOpacity, 250)]),
       Animated.sequence([
-        delay(900),
-        Animated.parallel([fadeIn(primaryOpacity, 250), slideTo0(primaryY, 250)]),
-      ]),
-      Animated.sequence([
-        delay(1000),
-        Animated.parallel([fadeIn(secondaryOpacity, 250), slideTo0(secondaryY, 250)]),
+        Animated.delay(500),
+        Animated.timing(subOpacity, {
+          toValue: 1,
+          duration: 280,
+          easing: ease,
+          useNativeDriver: true,
+        }),
       ]),
     ]).start();
-  }, [
-    bgOpacity,
-    haloOpacity,
-    haloScale,
-    headlineOpacity,
-    headlineY,
-    cardOpacity,
-    cardY,
-    repeatOpacity,
-    primaryOpacity,
-    primaryY,
-    secondaryOpacity,
-    secondaryY,
-  ]);
+
+    timeoutRef.current = setTimeout(() => {
+      timeoutRef.current = null;
+      dismiss();
+    }, ENTRY_MS + HOLD_MS);
+
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
-    <Animated.View style={[styles.root, { opacity: bgOpacity }]}>
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.container}>
-          <View style={styles.heroWrap}>
-            <Animated.View
-              style={[
-                styles.halo,
-                { opacity: haloOpacity, transform: [{ scale: haloScale }] },
-              ]}
-            />
+    <Animated.View style={[styles.root, { opacity: screenOpacity }]}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Continue"
+        onPress={dismiss}
+        style={StyleSheet.absoluteFill}
+      >
+        <SafeAreaView style={styles.safe}>
+          <View style={styles.container}>
+            <View style={styles.heroWrap}>
+              <Animated.View
+                style={[
+                  styles.halo,
+                  { opacity: haloOpacity, transform: [{ scale: haloScale }] },
+                ]}
+              />
+              <Animated.View
+                style={[
+                  styles.checkWrap,
+                  { opacity: checkOpacity, transform: [{ scale: checkScale }] },
+                ]}
+              >
+                <Check size={56} color={colors.black} strokeWidth={4} />
+              </Animated.View>
+            </View>
+
             <Animated.Text
               style={[
                 styles.headline,
                 { opacity: headlineOpacity, transform: [{ translateY: headlineY }] },
               ]}
             >
-              Challenge{'\n'}crushed!
+              You earned the day.
+            </Animated.Text>
+
+            <Animated.Text style={[styles.sub, { opacity: subOpacity }]}>
+              Tomorrow's challenge unlocks at midnight.
             </Animated.Text>
           </View>
-
-          <Animated.View
-            style={{ opacity: cardOpacity, transform: [{ translateY: cardY }] }}
-          >
-            <GlassCard tint="dark" style={styles.cardWrap} contentStyle={styles.card}>
-              <Text style={styles.totalLabel}>TOTAL REPS TODAY</Text>
-              <Text style={styles.totalReps}>{totalReps}</Text>
-              <Text style={styles.breakdown}>{breakdown}</Text>
-            </GlassCard>
-          </Animated.View>
-
-          <View style={styles.bottomSpacer} />
-
-          {repeatDaily ? (
-            <>
-              <Animated.Text style={[styles.repeatNote, { opacity: repeatOpacity }]}>
-                Same challenge tomorrow
-              </Animated.Text>
-              <Animated.View
-                style={{ opacity: primaryOpacity, transform: [{ translateY: primaryY }] }}
-              >
-                <PrimaryButton label="See You Tomorrow" onPress={onBackToDashboard} />
-              </Animated.View>
-            </>
-          ) : (
-            <>
-              <Animated.View
-                style={{ opacity: primaryOpacity, transform: [{ translateY: primaryY }] }}
-              >
-                <PrimaryButton label="Set Tomorrow's Challenge" onPress={onSetTomorrow} />
-              </Animated.View>
-              <View style={{ height: spacing.s3 }} />
-              <Animated.View
-                style={{ opacity: secondaryOpacity, transform: [{ translateY: secondaryY }] }}
-              >
-                <SecondaryButton label="Back to Dashboard" onPress={onBackToDashboard} />
-              </Animated.View>
-            </>
-          )}
-          <View style={{ height: spacing.s6 }} />
-        </View>
-      </SafeAreaView>
+        </SafeAreaView>
+      </Pressable>
     </Animated.View>
   );
 }
 
-const HALO_SIZE = 280;
+// Exported so App.tsx knows roughly how long the moment runs, in case it
+// wants to coordinate other transitions. The screen itself self-dismisses
+// reliably via onDismiss, so no consumer is required to use this.
+export const CHALLENGE_CELEBRATION_DURATION_MS = TOTAL_MS;
+
+const HALO_SIZE = 220;
+const CHECK_TILE = 96;
 
 const styles = StyleSheet.create({
   root: {
@@ -179,76 +197,53 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    paddingHorizontal: spacing.s6,
-    paddingTop: spacing.s16,
-  },
-  heroWrap: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: spacing.s10,
+    paddingHorizontal: spacing.s6,
+    gap: spacing.s5,
+  },
+  heroWrap: {
+    width: HALO_SIZE,
+    height: HALO_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.s2,
   },
   halo: {
     position: 'absolute',
     width: HALO_SIZE,
     height: HALO_SIZE,
     borderRadius: radius.full,
-    backgroundColor: 'rgba(205,255,0,0.12)',
-    borderColor: 'rgba(205,255,0,0.25)',
+    backgroundColor: 'rgba(205,255,0,0.14)',
+    borderColor: 'rgba(205,255,0,0.32)',
     borderWidth: 1,
   },
-  headline: {
-    fontSize: 48,
-    fontWeight: '900',
-    letterSpacing: -1.5,
-    lineHeight: 52,
-    color: colors.volt,
-    textAlign: 'center',
-    paddingVertical: spacing.s10,
-  },
-  cardWrap: {
-    borderColor: 'rgba(205,255,0,0.4)',
-    shadowColor: colors.volt,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 6,
-  },
-  card: {
-    paddingVertical: spacing.s8,
-    paddingHorizontal: spacing.s6,
+  checkWrap: {
+    width: CHECK_TILE,
+    height: CHECK_TILE,
+    borderRadius: radius.full,
+    backgroundColor: colors.volt,
     alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: colors.volt,
+    shadowOpacity: 0.45,
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 24,
+    elevation: 8,
   },
-  totalLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 1.5,
-    color: colors.gray400,
-    textTransform: 'uppercase',
-  },
-  totalReps: {
-    fontSize: 72,
-    fontWeight: '900',
+  headline: {
+    fontSize: 36,
+    fontWeight: '800',
+    letterSpacing: -1.08,
+    lineHeight: 40,
     color: colors.white,
-    letterSpacing: -2,
-    lineHeight: 78,
-    marginTop: spacing.s2,
-  },
-  breakdown: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: colors.gray300,
     textAlign: 'center',
-    marginTop: spacing.s3,
-    lineHeight: 24,
   },
-  bottomSpacer: {
-    flex: 1,
-  },
-  repeatNote: {
+  sub: {
     fontSize: 14,
     fontWeight: '500',
     color: colors.gray400,
     textAlign: 'center',
-    marginBottom: spacing.s4,
+    lineHeight: 20,
   },
 });

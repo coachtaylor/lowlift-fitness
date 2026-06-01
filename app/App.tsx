@@ -1,9 +1,10 @@
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Linking, StyleSheet, View } from 'react-native';
 import { AccountButton } from './src/components/AccountButton';
 import {
   FavoriteRecord,
+  FavoriteSnapshot,
   loadFavorites,
   removeFavorite,
   saveFavorite,
@@ -16,15 +17,24 @@ import {
   scheduleDailyReminder,
   wasDailyReminderDeclined,
 } from './src/data/notifications';
-import { loadChallenge } from './src/data/dailyChallenge';
+import {
+  deleteChallenge,
+  isNewDay,
+  loadChallenge,
+  resetForNewDay,
+} from './src/data/dailyChallenge';
 import * as Notifications from 'expo-notifications';
 import { CompletedSession } from './src/data/history';
 import { loadMovements } from './src/data/movements';
+import { Session, getSessionBySlug } from './src/data/sessions';
+import { generateSession, SessionSelection } from './src/data/generateSession';
 import {
-  Session,
-  getRandomSession,
-  getSessionBySlug,
-} from './src/data/sessions';
+  MovementPrefs,
+  clearHidden,
+  clearLocalMovementPrefs,
+  loadMovementPreferences,
+  setMovementPreference,
+} from './src/data/movementPreferences';
 import {
   endAttempt,
   loadCompletedSessions,
@@ -48,15 +58,23 @@ import { ChallengeSessionScreen } from './src/screens/ChallengeSessionScreen';
 import { CompletionScreen } from './src/screens/CompletionScreen';
 import { DailyChallenge, DailyChallengeMovementType } from './src/data/dailyChallenge';
 import { DailyChallengeSetupScreen } from './src/screens/DailyChallengeSetupScreen';
-import { DashboardScreen } from './src/screens/DashboardScreen';
+import TabNavigator from './src/navigation/TabNavigator';
+import {
+  NavigationContainer,
+  createNavigationContainerRef,
+} from '@react-navigation/native';
 import { OnboardingFlow } from './src/screens/OnboardingFlow';
 import { PasswordResetScreen } from './src/screens/PasswordResetScreen';
 import { SessionPlayerScreen } from './src/screens/SessionPlayerScreen';
 import { SessionPreviewScreen } from './src/screens/SessionPreviewScreen';
 import { SessionSelectionScreen } from './src/screens/SessionSelectionScreen';
 import { Movement } from './src/data/movements';
-import { SessionType } from './src/components/SessionCard';
 import { colors } from './src/theme/tokens';
+
+// Module-scope ref so we can dispatch tab navigations from imperative
+// callbacks (e.g. dismissing the celebration moment) without threading
+// useNavigation everywhere.
+const navigationRef = createNavigationContainerRef();
 
 type Screen =
   | 'auth'
@@ -78,6 +96,65 @@ type Screen =
 // account itself has its own back navigation.
 const HIDE_ACCOUNT_BUTTON: Screen[] = ['auth', 'password-reset', 'preview', 'player', 'account', 'challenge-session', 'challenge-session-celebration', 'challenge-celebration'];
 
+// Build a slim, replayable snapshot from a full generated Session.
+function toFavoriteSnapshot(session: Session): FavoriteSnapshot {
+  return {
+    slug: session.slug,
+    type: session.type,
+    name: session.name,
+    movements: session.movements.map((m) => ({
+      slug: m.slug,
+      name: m.name,
+      duration: m.duration,
+    })),
+  };
+}
+
+// Build a snapshot from a completed-history row — used when favoriting from the
+// Recent/Progress lists, where we only have the slim history record.
+function snapshotFromHistory(h: CompletedSession): FavoriteSnapshot {
+  return {
+    slug: h.sessionSlug,
+    type: h.type,
+    name: h.sessionName,
+    movements: (h.movements ?? []).map((m) => ({
+      slug: m.slug,
+      name: m.name,
+      duration: m.durationSeconds,
+    })),
+  };
+}
+
+// Re-hydrate a favorite into a full, replayable Session. Templates (no snapshot)
+// resolve live by slug. Generated sessions store movements by slug; we pull the
+// rich Movement from the live library and override the duration with the saved
+// value (generated sessions pad durations to hit an exact length), falling back
+// to a minimal Movement if a slug has since been removed from the library.
+async function hydrateFavorite(record: FavoriteRecord): Promise<Session | null> {
+  if (!record.snapshot) return getSessionBySlug(record.sessionId);
+  const snap = record.snapshot;
+  const lib = await loadMovements();
+  const movements: Movement[] = snap.movements.map((ref) => {
+    const full = lib.get(ref.slug);
+    if (full) return { ...full, duration: ref.duration };
+    return {
+      id: ref.slug,
+      slug: ref.slug,
+      name: ref.name,
+      category: 'move',
+      subcategory: null,
+      bodyArea: 'full',
+      duration: ref.duration,
+      difficulty: 1,
+      steps: [],
+      cues: [],
+      videoUrl: null,
+      thumbUrl: null,
+    };
+  });
+  return { id: snap.slug, slug: snap.slug, type: snap.type, name: snap.name, movements };
+}
+
 export default function App() {
   const [hydrated, setHydrated] = useState(false);
   const [screen, setScreen] = useState<Screen>('auth');
@@ -85,6 +162,15 @@ export default function App() {
   const [previewSession, setPreviewSession] = useState<Session | null>(null);
   const [activeAttemptId, setActiveAttemptId] = useState<string | null>(null);
   const [lastCompletion, setLastCompletion] = useState<CompletedSession | null>(null);
+  // Session generator: per-movement favorite/hide signals, recency, last picks.
+  const [movementPrefs, setMovementPrefs] = useState<MovementPrefs>({ favorites: [], hidden: [] });
+  const [recentMovements, setRecentMovements] = useState<string[]>([]);
+  const [lastSelection, setLastSelection] = useState<SessionSelection>({
+    type: 'move',
+    length: 'standard',
+    focus: 'full',
+  });
+  const [previewRelaxed, setPreviewRelaxed] = useState(false);
   const [history, setHistory] = useState<CompletedSession[]>([]);
   const [favorites, setFavorites] = useState<FavoriteRecord[]>([]);
   const [favoriteSessions, setFavoriteSessions] = useState<Session[]>([]);
@@ -94,29 +180,80 @@ export default function App() {
   );
   const [authed, setAuthed] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [completedChallenge, setCompletedChallenge] = useState<DailyChallenge | null>(null);
-  const [postSessionChallenge, setPostSessionChallenge] = useState<DailyChallenge | null>(null);
-  const [postSessionReps, setPostSessionReps] = useState<
-    Partial<Record<DailyChallengeMovementType, number>>
-  >({});
+  const [challenge, setChallenge] = useState<DailyChallenge | null>(null);
+  // Snapshot of the most recent challenge state worth celebrating. Drives the
+  // per-session celebration (which uses `reps` for the "this session" total)
+  // and the full-completion celebration (which reads only `challenge`).
+  // `reps` is only set when completion came from a guided session — manual
+  // tap-to-add completion goes straight to the full-completion screen and
+  // doesn't carry a per-session breakdown.
+  const [lastChallengeSession, setLastChallengeSession] = useState<{
+    challenge: DailyChallenge;
+    reps?: Partial<Record<DailyChallengeMovementType, number>>;
+  } | null>(null);
+
+  // After the celebration moment dismisses we want users back on the Challenge
+  // tab (which now renders OptionDone), not the dashboard's default Home tab.
+  // We can't pass a tab destination through screen state alone, so use a flag
+  // and a useEffect to dispatch a tab navigate once the TabNavigator is back
+  // in the tree.
+  const [pendingChallengeTab, setPendingChallengeTab] = useState(false);
+
+  // refreshChallenge does a check-then-act on isNewDay/resetForNewDay; without
+  // a lock, two concurrent callers (app resume + tab focus) can both fire
+  // resetForNewDay and double-schedule notifications. Coalesce concurrent calls
+  // onto a single in-flight promise.
+  const refreshingChallengeRef = useRef<Promise<void> | null>(null);
+  const refreshChallenge = (): Promise<void> => {
+    if (refreshingChallengeRef.current) return refreshingChallengeRef.current;
+    const work = (async () => {
+      try {
+        const loaded = await loadChallenge();
+        if (loaded && loaded.repeatDaily && isNewDay(loaded)) {
+          const reset = await resetForNewDay();
+          setChallenge(reset);
+          return;
+        }
+        if (loaded && !loaded.repeatDaily && isNewDay(loaded)) {
+          await deleteChallenge();
+          setChallenge(null);
+          return;
+        }
+        setChallenge(loaded);
+      } finally {
+        refreshingChallengeRef.current = null;
+      }
+    })();
+    refreshingChallengeRef.current = work;
+    return work;
+  };
 
   useEffect(() => {
     let cancelled = false;
 
     const hydrateAuthedUser = async () => {
       await recoverStaleAttempts();
-      const [{ onboarded }, completed, favs] = await Promise.all([
+      const [{ onboarded }, completed, favs, , prefs] = await Promise.all([
         loadState(),
         loadCompletedSessions(),
         loadFavorites(),
         loadMovements(),
+        loadMovementPreferences(),
       ]);
       if (cancelled) return;
       setHistory(completed);
       setFavorites(favs);
-      setScreen(onboarded ? 'dashboard' : 'onboarding');
+      setMovementPrefs(prefs);
+      // Returning users skip onboarding. The onboarded flag is only device-local,
+      // so a returning user on a new device — or after sign-out clears the flag —
+      // would otherwise be re-onboarded. Server-side history proves they're an
+      // existing user, so treat that as onboarded and repair the local flag.
+      const returning = onboarded || completed.length > 0;
+      if (returning && !onboarded) saveOnboarded(true).catch(() => {});
+      setScreen(returning ? 'dashboard' : 'onboarding');
       flushPendingFeedback().catch(() => {});
       reconcileDailyReminder().catch(() => {});
+      refreshChallenge().catch(() => {});
     };
 
     const hydrationTimeout = setTimeout(() => {
@@ -203,7 +340,7 @@ export default function App() {
     (async () => {
       const resolved: Session[] = [];
       for (const f of favorites) {
-        const s = await getSessionBySlug(f.sessionId);
+        const s = await hydrateFavorite(f);
         if (s) resolved.push(s);
       }
       if (!cancelled) setFavoriteSessions(resolved);
@@ -212,6 +349,24 @@ export default function App() {
       cancelled = true;
     };
   }, [favorites]);
+
+  // After the celebration dismisses to 'dashboard', jump the TabNavigator to
+  // the Challenge tab on the next frame (so TabNavigator has mounted before
+  // we dispatch). Then clear the flag.
+  useEffect(() => {
+    if (!pendingChallengeTab || screen !== 'dashboard') return;
+    const id = requestAnimationFrame(() => {
+      if (navigationRef.isReady()) {
+        try {
+          navigationRef.navigate('ChallengeTab' as never);
+        } catch (err) {
+          console.warn('[app] navigate to ChallengeTab failed:', err);
+        }
+      }
+      setPendingChallengeTab(false);
+    });
+    return () => cancelAnimationFrame(id);
+  }, [pendingChallengeTab, screen]);
 
   const reconcileDailyReminder = async () => {
     const challenge = await loadChallenge();
@@ -233,19 +388,71 @@ export default function App() {
     setScreen('selection');
   };
 
-  const previewSessionForType = async (type: SessionType) => {
-    const session = await getRandomSession(type);
-    if (!session) {
-      console.warn('[app] no session available for type', type);
-      return;
-    }
+  const generateAndPreview = async (selection: SessionSelection) => {
+    setLastSelection(selection);
+    const catalog = await loadMovements();
+    const pool = Array.from(catalog.values());
+    const { session, relaxed } = generateSession({
+      pool,
+      selection,
+      favorites: movementPrefs.favorites,
+      hidden: movementPrefs.hidden,
+      recent: recentMovements,
+    });
     setPreviewSession(session);
+    setPreviewRelaxed(relaxed);
     setScreen('preview');
+  };
+
+  const regeneratePreview = async () => {
+    const catalog = await loadMovements();
+    const pool = Array.from(catalog.values());
+    const avoid = previewSession ? previewSession.movements.map((m) => m.slug) : [];
+    const { session, relaxed } = generateSession({
+      pool,
+      selection: lastSelection,
+      favorites: movementPrefs.favorites,
+      hidden: movementPrefs.hidden,
+      recent: recentMovements,
+      avoid,
+    });
+    setPreviewSession(session);
+    setPreviewRelaxed(relaxed);
+  };
+
+  const favoriteMovement = (slug: string, willFav: boolean) => {
+    setMovementPrefs((prev) => ({
+      favorites: willFav
+        ? Array.from(new Set([slug, ...prev.favorites]))
+        : prev.favorites.filter((s) => s !== slug),
+      hidden: prev.hidden.filter((s) => s !== slug),
+    }));
+    setMovementPreference(slug, willFav ? 'favorite' : null);
+  };
+
+  const hideMovement = (slug: string) => {
+    setMovementPrefs((prev) => ({
+      favorites: prev.favorites.filter((s) => s !== slug),
+      hidden: Array.from(new Set([slug, ...prev.hidden])),
+    }));
+    setMovementPreference(slug, 'hidden');
+  };
+
+  const unhideMovement = (slug: string) => {
+    setMovementPrefs((prev) => ({ ...prev, hidden: prev.hidden.filter((s) => s !== slug) }));
+    setMovementPreference(slug, null);
+  };
+
+  const unhideAllMovements = () => {
+    const toClear = movementPrefs.hidden;
+    setMovementPrefs((prev) => ({ ...prev, hidden: [] }));
+    clearHidden(toClear);
   };
 
   const startSessionWithMovements = async (movements: Movement[]) => {
     if (!previewSession) return;
     const session: Session = { ...previewSession, movements };
+    setRecentMovements(movements.map((m) => m.slug).slice(0, 10));
     const attemptId = await startAttempt(session);
     setActiveSession(session);
     setActiveAttemptId(attemptId);
@@ -253,7 +460,21 @@ export default function App() {
     setScreen('player');
   };
 
+  // Reset device-local state on sign-out so it doesn't bleed into the next
+  // account on this device. The active challenge and onboarding flag are now
+  // per-user keyed (dailyChallenge.ts / storage.ts), so they're intentionally
+  // NOT wiped — each account keeps its own and a returning user isn't reset.
+  // The movement-pref mirror is a single device cache, so clear it (it
+  // repopulates from Supabase for whoever signs in next). In-memory state is
+  // reset so the UI doesn't flash the previous user's data before re-hydrate.
+  const clearDeviceLocalState = async () => {
+    await clearLocalMovementPrefs();
+    setChallenge(null);
+    setMovementPrefs({ favorites: [], hidden: [] });
+  };
+
   const handleSignOut = async () => {
+    await clearDeviceLocalState();
     await supabase.auth.signOut();
   };
 
@@ -267,6 +488,7 @@ export default function App() {
       );
       return;
     }
+    await clearDeviceLocalState();
     await supabase.auth.signOut();
   };
 
@@ -313,7 +535,19 @@ export default function App() {
     if (isSaved) {
       await removeFavorite(sessionId);
     } else {
-      const result = await saveFavorite(sessionId);
+      // Generated sessions are random — persist a snapshot so they can be
+      // resolved into the Favorites tab and replayed exactly. Templates keep
+      // resolving live by slug (no snapshot).
+      let snapshot: FavoriteSnapshot | undefined;
+      if (sessionId.startsWith('generated-')) {
+        const fromSession = [activeSession, previewSession].find((s) => s?.slug === sessionId);
+        if (fromSession) snapshot = toFavoriteSnapshot(fromSession);
+        else {
+          const h = history.find((x) => x.sessionSlug === sessionId);
+          if (h) snapshot = snapshotFromHistory(h);
+        }
+      }
+      const result = await saveFavorite(sessionId, snapshot);
       if (result === 'full') {
         Alert.alert('Favorites full', 'Remove a favorite to add a new one.');
         return;
@@ -324,7 +558,10 @@ export default function App() {
   };
 
   const startFavoriteSession = async (sessionId: string) => {
-    const session = await getSessionBySlug(sessionId);
+    const record = favorites.find((f) => f.sessionId === sessionId);
+    const session = record
+      ? await hydrateFavorite(record)
+      : await getSessionBySlug(sessionId);
     if (!session) {
       console.warn('[app] favorite session not found:', sessionId);
       return;
@@ -366,7 +603,9 @@ export default function App() {
             ]);
             setHistory(completed);
             setFavorites(favs);
-            setScreen(onboarded ? 'dashboard' : 'onboarding');
+            const returning = onboarded || completed.length > 0;
+            if (returning && !onboarded) saveOnboarded(true).catch(() => {});
+            setScreen(returning ? 'dashboard' : 'onboarding');
           }}
         />
       );
@@ -375,7 +614,8 @@ export default function App() {
     if (screen === 'selection') {
       return (
         <SessionSelectionScreen
-          onSelect={previewSessionForType}
+          initialSelection={lastSelection}
+          onGenerate={generateAndPreview}
           onBack={history.length > 0 ? () => setScreen('dashboard') : undefined}
         />
       );
@@ -384,8 +624,18 @@ export default function App() {
       return (
         <SessionPreviewScreen
           session={previewSession}
+          selection={lastSelection}
+          favorites={movementPrefs.favorites}
+          hidden={movementPrefs.hidden}
+          recent={recentMovements}
+          relaxed={previewRelaxed}
+          firstSession={history.length === 0}
+          onFavorite={favoriteMovement}
+          onHide={hideMovement}
+          onUnhideOne={unhideMovement}
+          onUnhideAll={unhideAllMovements}
+          onRegenerate={regeneratePreview}
           onStart={startSessionWithMovements}
-          onSkip={() => startSessionWithMovements(previewSession.movements)}
           onBack={handlePreviewBack}
         />
       );
@@ -404,7 +654,11 @@ export default function App() {
     if (screen === 'daily-challenge-setup') {
       return (
         <DailyChallengeSetupScreen
-          onComplete={() => setScreen('dashboard')}
+          existingChallenge={challenge}
+          onComplete={() => {
+            refreshChallenge().catch(() => {});
+            setScreen('dashboard');
+          }}
           onBack={() => setScreen('dashboard')}
         />
       );
@@ -412,48 +666,49 @@ export default function App() {
     if (screen === 'challenge-session') {
       return (
         <ChallengeSessionScreen
+          challenge={challenge}
           onFinish={(updated, sessionReps) => {
             if (!updated) {
+              refreshChallenge().catch(() => {});
               setScreen('dashboard');
               return;
             }
-            setPostSessionChallenge(updated);
-            setPostSessionReps(sessionReps);
+            // updated is the post-completeSession local state. Authoritative
+            // for the celebration flow; we don't need to refresh from disk.
+            setChallenge(updated);
+            setLastChallengeSession({ challenge: updated, reps: sessionReps });
             setScreen('challenge-session-celebration');
           }}
-          onExit={() => setScreen('dashboard')}
+          onExit={() => {
+            refreshChallenge().catch(() => {});
+            setScreen('dashboard');
+          }}
         />
       );
     }
-    if (screen === 'challenge-session-celebration' && postSessionChallenge) {
+    if (screen === 'challenge-session-celebration' && lastChallengeSession) {
       return (
         <ChallengeSessionCelebrationScreen
-          challenge={postSessionChallenge}
-          sessionReps={postSessionReps}
+          challenge={lastChallengeSession.challenge}
+          sessionReps={lastChallengeSession.reps ?? {}}
           onContinue={() => {
-            const finished = postSessionChallenge;
-            setPostSessionChallenge(null);
-            setPostSessionReps({});
-            if (finished.isComplete) {
-              setCompletedChallenge(finished);
+            if (lastChallengeSession.challenge.isComplete) {
               setScreen('challenge-celebration');
             } else {
+              setLastChallengeSession(null);
               setScreen('dashboard');
             }
           }}
         />
       );
     }
-    if (screen === 'challenge-celebration' && completedChallenge) {
+    if (screen === 'challenge-celebration' && lastChallengeSession) {
       return (
         <ChallengeCelebrationScreen
-          challenge={completedChallenge}
-          onSetTomorrow={() => {
-            setCompletedChallenge(null);
-            setScreen('daily-challenge-setup');
-          }}
-          onBackToDashboard={() => {
-            setCompletedChallenge(null);
+          onDismiss={() => {
+            setLastChallengeSession(null);
+            refreshChallenge().catch(() => {});
+            setPendingChallengeTab(true);
             setScreen('dashboard');
           }}
         />
@@ -481,15 +736,26 @@ export default function App() {
       );
     }
     return (
-      <DashboardScreen
+      <TabNavigator
         history={history}
         favoriteSlugs={favoriteSlugs}
         favoriteSessions={favoriteSessions}
         onToggleFavorite={toggleFavorite}
         onStartFavorite={startFavoriteSession}
         onStart={() => setScreen('selection')}
+        challenge={challenge}
         onSetupChallenge={() => setScreen('daily-challenge-setup')}
         onStartChallengeSession={() => setScreen('challenge-session')}
+        onEditChallenge={() => setScreen('daily-challenge-setup')}
+        onChallengeUpdated={(next) => {
+          setChallenge(next);
+          if (next.isComplete && !challenge?.isComplete) {
+            // Manual tap-to-add completion: no per-session reps to surface,
+            // and we skip the per-session celebration screen entirely.
+            setLastChallengeSession({ challenge: next });
+            setScreen('challenge-celebration');
+          }
+        }}
       />
     );
   };
@@ -504,13 +770,15 @@ export default function App() {
       : 'dark';
 
   return (
-    <View style={styles.root}>
-      <StatusBar style={statusBarStyle} />
-      {renderScreen()}
-      {showAccountButton && (
-        <AccountButton onPress={() => setScreen('account')} />
-      )}
-    </View>
+    <NavigationContainer ref={navigationRef}>
+      <View style={styles.root}>
+        <StatusBar style={statusBarStyle} />
+        {renderScreen()}
+        {showAccountButton && (
+          <AccountButton onPress={() => setScreen('account')} />
+        )}
+      </View>
+    </NavigationContainer>
   );
 }
 
